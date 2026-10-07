@@ -74,7 +74,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
 
                 // Webhook IPN và Return URL từ cổng thanh toán VNPAY: Công khai (không yêu cầu JWT Bearer)
-                .requestMatchers("/api/payment/vnpay-ipn", "/api/payment/vnpay-return").permitAll()
+                .requestMatchers(
+                    "/api/payment/vnpay-ipn", "/api/payment/vnpay-return",
+                    "/api/v1/payments/vnpay-ipn", "/api/v1/payments/vnpay-return"
+                ).permitAll()
 
                 // GET Xem sản phẩm, danh mục, voucher khả dụng: Công khai cho khách vãng lai
                 .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()

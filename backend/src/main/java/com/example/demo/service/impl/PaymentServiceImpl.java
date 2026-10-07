@@ -3,6 +3,7 @@ package com.example.demo.service.impl;
 import com.example.demo.config.VnPayConfig;
 import com.example.demo.dto.OrderItemResponse;
 import com.example.demo.dto.OrderResponse;
+import com.example.demo.dto.PaymentResponse;
 import com.example.demo.entity.Order;
 import com.example.demo.entity.OrderItem;
 import com.example.demo.entity.Product;
@@ -12,6 +13,7 @@ import com.example.demo.repository.OrderRepository;
 import com.example.demo.repository.ProductRepository;
 import com.example.demo.service.PaymentService;
 import com.example.demo.service.VoucherService;
+import com.example.demo.util.VNPayUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,10 +37,9 @@ import java.util.Optional;
 import java.util.TimeZone;
 
 /**
- * Xử lý tích hợp cổng thanh toán VNPAY Sandbox:
- * - Sinh URL thanh toán có chữ ký số HMAC-SHA512
- * - Webhook IPN xử lý bất đồng bộ, bảo vệ chống trùng lặp (Idempotency)
- * - Tự động đồng bộ tồn kho và hủy đơn quá 15 phút chưa thanh toán
+ * Xử lý logic nghiệp vụ thanh toán VNPAY Sandbox:
+ * - createPaymentUrl: Tạo URL thanh toán kiểm tra trạng thái PENDING
+ * - processIpn: Xử lý Webhook IPN từ VNPAY, kiểm tra tính lũy đẳng (Idempotency) và hoàn kho khi thất bại
  */
 @Service
 @RequiredArgsConstructor
@@ -52,22 +53,23 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public String createVnPayPaymentUrl(Long orderId, HttpServletRequest request) {
+    public PaymentResponse createPaymentUrl(Long orderId, HttpServletRequest request) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + orderId));
+
+        // 1. Kiểm tra điều kiện: Chỉ tạo link thanh toán khi đơn hàng đang ở trạng thái PENDING
+        if (!"PENDING".equalsIgnoreCase(order.getStatus())) {
+            throw new BadRequestException("Chỉ có thể tạo thanh toán cho đơn hàng đang ở trạng thái Chờ xử lý (PENDING)!");
+        }
 
         if ("PAID".equalsIgnoreCase(order.getPaymentStatus())) {
             throw new BadRequestException("Đơn hàng này đã được thanh toán thành công trước đó!");
         }
 
-        if ("CANCELLED".equalsIgnoreCase(order.getStatus())) {
-            throw new BadRequestException("Đơn hàng này đã bị hủy, không thể tiếp tục thanh toán!");
-        }
-
-        // Quy đổi số tiền sang định dạng VNPAY yêu cầu (nhân 100, không có phần thập phân)
+        // 2. Tính tổng tiền cần thanh toán (nhân 100 theo quy định không dấu thập phân của VNPAY)
         long amount = order.getTotalAmount().multiply(BigDecimal.valueOf(100)).longValue();
 
-        // Thời gian tạo giao dịch và hạn thanh toán (hết hạn sau đúng 15 phút)
+        // 3. Thời gian tạo giao dịch và hạn thanh toán (+15 phút)
         Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("Etc/GMT+7"));
         SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
         String createDate = formatter.format(calendar.getTime());
@@ -75,22 +77,23 @@ public class PaymentServiceImpl implements PaymentService {
         calendar.add(Calendar.MINUTE, 15);
         String expireDate = formatter.format(calendar.getTime());
 
+        // 4. Xây dựng các tham số URL gửi sang VNPAY
         Map<String, String> vnpParams = new HashMap<>();
         vnpParams.put("vnp_Version", VnPayConfig.VNP_VERSION);
         vnpParams.put("vnp_Command", VnPayConfig.VNP_COMMAND);
-        vnpParams.put("vnp_TmnCode", vnPayConfig.getVnpTmnCode());
+        vnpParams.put("vnp_TmnCode", vnPayConfig.getVnp_TmnCode());
         vnpParams.put("vnp_Amount", String.valueOf(amount));
         vnpParams.put("vnp_CurrCode", VnPayConfig.VNP_CURR_CODE);
         vnpParams.put("vnp_TxnRef", order.getOrderNumber());
         vnpParams.put("vnp_OrderInfo", "Thanh toan don hang #" + order.getOrderNumber());
         vnpParams.put("vnp_OrderType", "other");
         vnpParams.put("vnp_Locale", VnPayConfig.VNP_LOCALE);
-        vnpParams.put("vnp_ReturnUrl", vnPayConfig.getVnpReturnUrl());
-        vnpParams.put("vnp_IpAddr", vnPayConfig.getIpAddress(request));
+        vnpParams.put("vnp_ReturnUrl", vnPayConfig.getVnp_ReturnUrl());
+        vnpParams.put("vnp_IpAddr", VNPayUtil.getIpAddress(request));
         vnpParams.put("vnp_CreateDate", createDate);
         vnpParams.put("vnp_ExpireDate", expireDate);
 
-        // Sắp xếp các tham số theo bảng chữ cái US-ASCII để tạo chuỗi băm
+        // 5. Sắp xếp các tham số theo bảng chữ cái US-ASCII để tính toán chữ ký số HmacSHA512
         List<String> fieldNames = new ArrayList<>(vnpParams.keySet());
         Collections.sort(fieldNames);
 
@@ -113,33 +116,37 @@ public class PaymentServiceImpl implements PaymentService {
             }
         }
 
-        // Tạo chữ ký HMAC-SHA512 an toàn
-        String secureHash = vnPayConfig.hmacSHA512(vnPayConfig.getVnpHashSecret(), hashData.toString());
-        String paymentUrl = vnPayConfig.getVnpPayUrl() + "?" + query.toString() + "&vnp_SecureHash=" + secureHash;
+        // Tạo chữ ký số HMAC-SHA512 an toàn chống chỉnh sửa dữ liệu
+        String secureHash = VNPayUtil.hmacSHA512(vnPayConfig.getVnp_HashSecret(), hashData.toString());
+        String paymentUrl = vnPayConfig.getVnp_PayUrl() + "?" + query.toString() + "&vnp_SecureHash=" + secureHash;
 
         // Cập nhật phương thức thanh toán là VNPAY cho đơn hàng
         order.setPaymentMethod("VNPAY");
         orderRepository.save(order);
 
-        log.info("[VNPAY] Đã tạo Payment URL thành công cho đơn hàng #{} - Số tiền: {} đ",
+        log.info("[VNPAY] Tạo link thanh toán thành công cho đơn hàng #{} - Số tiền: {} đ",
                 order.getOrderNumber(), order.getTotalAmount());
-        return paymentUrl;
+
+        return PaymentResponse.builder()
+                .paymentUrl(paymentUrl)
+                .status("OK")
+                .message("Tạo URL chuyển hướng VNPAY thành công!")
+                .build();
     }
 
     @Override
     @Transactional
-    public Map<String, String> processIpnWebhook(Map<String, String> params) {
+    public Map<String, String> processIpn(Map<String, String> params) {
         log.info("[VNPAY IPN] Bắt đầu xử lý Webhook ngầm từ máy chủ VNPAY: {}", params);
-
         Map<String, String> response = new HashMap<>();
 
-        // 1. Xác thực chữ ký số (Checksum)
+        // 1. Kiểm tra chữ ký Checksum hợp lệ
         String vnpSecureHash = params.get("vnp_SecureHash");
         Map<String, String> fields = new HashMap<>(params);
         fields.remove("vnp_SecureHash");
         fields.remove("vnp_SecureHashType");
 
-        String calculatedHash = vnPayConfig.hashAllFields(fields);
+        String calculatedHash = VNPayUtil.hashAllFields(fields, vnPayConfig.getVnp_HashSecret());
         if (!calculatedHash.equalsIgnoreCase(vnpSecureHash)) {
             log.error("[VNPAY IPN] Sai chữ ký số! Checksum không khớp.");
             response.put("RspCode", "97");
@@ -169,30 +176,31 @@ public class PaymentServiceImpl implements PaymentService {
             return response;
         }
 
-        // 4. Kiểm tra tính lũy đẳng (Idempotency): Nếu đơn hàng đã PAID thì bỏ qua cập nhật lặp lại
-        if ("PAID".equalsIgnoreCase(order.getPaymentStatus())) {
-            log.info("[VNPAY IPN - Idempotency] Đơn hàng #{} đã ở trạng thái PAID. Bỏ qua xử lý lặp lại.", orderNumber);
+        // 4. Kiểm tra Tính lũy đẳng (Idempotency): Nếu đơn hàng đã ở trạng thái PAID hoặc CANCELLED, trả về mã 02 ('Order already confirmed')
+        if ("PAID".equalsIgnoreCase(order.getPaymentStatus()) || "CANCELLED".equalsIgnoreCase(order.getStatus())) {
+            log.info("[VNPAY IPN - Idempotency] Đơn hàng #{} đã ở trạng thái {} / {}. Bỏ qua xử lý lặp lại.",
+                    orderNumber, order.getPaymentStatus(), order.getStatus());
             response.put("RspCode", "02");
             response.put("Message", "Order already confirmed");
             return response;
         }
 
-        // 5. Kiểm tra kết quả thanh toán từ VNPAY (Mã '00' = Thành công)
+        // 5. Kiểm tra mã phản hồi từ VNPAY
         String responseCode = params.get("vnp_ResponseCode");
         if ("00".equals(responseCode)) {
-            // Thanh toán thành công -> Cập nhật PAID, chuyển trạng thái đơn hàng sang ĐANG XỬ LÝ
+            // Thanh toán thành công (mã 00) -> Cập nhật đơn thành PAID
             order.setPaymentStatus("PAID");
             order.setStatus("PROCESSING");
             orderRepository.save(order);
             log.info("[VNPAY IPN] Thanh toán THÀNH CÔNG cho đơn hàng #{}. Trạng thái -> PAID", orderNumber);
         } else {
-            // Thanh toán thất bại hoặc người dùng bấm Hủy -> Hủy đơn và ROLLBACK TỒN KHO SẢN PHẨM
+            // Thanh toán thất bại -> Cập nhật FAILED, đồng thời hoàn trả lại số lượng sản phẩm vào kho (Product.stockQuantity)
             order.setPaymentStatus("FAILED");
             order.setStatus("CANCELLED");
 
             rollbackStockAndVoucher(order);
             orderRepository.save(order);
-            log.warn("[VNPAY IPN] Giao dịch thất bại (Mã lỗi: {}). Đã hủy đơn #{} và hoàn kho sản phẩm.",
+            log.warn("[VNPAY IPN] Thanh toán thất bại (Mã lỗi: {}). Đã hủy đơn #{} và hoàn trả tồn kho.",
                     responseCode, orderNumber);
         }
 
@@ -209,7 +217,7 @@ public class PaymentServiceImpl implements PaymentService {
         fields.remove("vnp_SecureHash");
         fields.remove("vnp_SecureHashType");
 
-        String calculatedHash = vnPayConfig.hashAllFields(fields);
+        String calculatedHash = VNPayUtil.hashAllFields(fields, vnPayConfig.getVnp_HashSecret());
         if (!calculatedHash.equalsIgnoreCase(vnpSecureHash)) {
             throw new BadRequestException("Chữ ký bảo mật không hợp lệ!");
         }
@@ -237,9 +245,7 @@ public class PaymentServiceImpl implements PaymentService {
         return mapToOrderResponse(order);
     }
 
-    /**
-     * Tự động quét mỗi 5 phút: Nếu đơn hàng VNPAY quá 15 phút chưa thanh toán -> Tự động Hủy đơn và Hoàn kho.
-     */
+    @Override
     @Scheduled(cron = "0 */5 * * * *")
     @Transactional
     public void cancelExpiredVnPayOrders() {
@@ -248,7 +254,7 @@ public class PaymentServiceImpl implements PaymentService {
                 "UNPAID", "VNPAY", "PENDING", threshold);
 
         if (!expiredOrders.isEmpty()) {
-            log.info("[VNPAY Auto-Cancel] Tìm thấy {} đơn hàng quá hạn 15 phút chưa thanh toán.", expiredOrders.size());
+            log.info("[VNPAY Auto-Cancel] Quét thấy {} đơn hàng quá hạn 15 phút chưa thanh toán.", expiredOrders.size());
             for (Order order : expiredOrders) {
                 order.setStatus("CANCELLED");
                 order.setPaymentStatus("EXPIRED");
@@ -260,7 +266,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * Hoàn trả lại số lượng tồn kho sản phẩm máy tính/điện thoại và lượt dùng voucher khi đơn hàng bị hủy/thất bại.
+     * Hoàn trả lại số lượng tồn kho sản phẩm (Product.stockQuantity) và lượt dùng voucher khi đơn hàng bị hủy/thất bại.
      */
     private void rollbackStockAndVoucher(Order order) {
         if (order.getItems() != null) {
