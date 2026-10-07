@@ -2,7 +2,7 @@
  * Client kết nối RESTful API với Spring Boot Backend (http://localhost:8080/api).
  * Tự động gắn kèm Header Authorization: Bearer <token> khi đã đăng nhập.
  */
-const BASE_URL = 'http://localhost:8080/api';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
 
 export const apiClient = async (endpoint, options = {}) => {
   const token = localStorage.getItem('access_token');
@@ -22,7 +22,10 @@ export const apiClient = async (endpoint, options = {}) => {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.message || 'Đã có lỗi xảy ra từ máy chủ');
+    const err = new Error(data?.message || `Lỗi máy chủ (${response.status})`);
+    err.status = response.status;
+    err.data = data;
+    throw err;
   }
 
   return data;

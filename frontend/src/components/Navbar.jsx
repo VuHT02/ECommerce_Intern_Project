@@ -135,7 +135,8 @@ export default function Navbar() {
           {/* User Profile / Login */}
           {isLoggedIn ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span
+              <Link
+                to="/profile"
                 style={{
                   fontSize: '14px',
                   fontWeight: 600,
@@ -143,11 +144,14 @@ export default function Navbar() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
+                  textDecoration: 'none',
                 }}
+                className="hover:text-blue-600 transition-colors"
+                title="Tài khoản & Lịch sử đơn hàng"
               >
                 <User size={16} color="var(--primary)" />
                 {user?.fullName || user?.email}
-              </span>
+              </Link>
               <button
                 onClick={handleLogout}
                 className="btn btn-outline"

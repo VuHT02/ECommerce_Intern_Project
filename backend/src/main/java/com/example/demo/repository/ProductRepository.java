@@ -47,9 +47,25 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     /**
      * Custom Query 2 (JPQL có phân trang & giá trị tùy chọn):
-     * Tìm kiếm sản phẩm theo tên danh mục (ví dụ "Điện tử"), từ khóa tên sản phẩm
+     * Tìm kiếm sản phẩm theo tên danh mục, thương hiệu (brand), từ khóa tên sản phẩm
      * và khoảng giá linh hoạt (minPrice/maxPrice có thể null).
      */
+    @Query("SELECT p FROM Product p " +
+           "JOIN p.category c " +
+           "WHERE p.active = true " +
+           "AND (:categoryName = '' OR LOWER(c.name) LIKE LOWER(CONCAT('%', :categoryName, '%'))) " +
+           "AND (:brand = '' OR LOWER(p.brand) LIKE LOWER(CONCAT('%', :brand, '%'))) " +
+           "AND (:keyword = '' OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+           "AND (:minPrice IS NULL OR p.price >= :minPrice) " +
+           "AND (:maxPrice IS NULL OR p.price <= :maxPrice)")
+    Page<Product> searchByCategoryAndBrandAndNameAndPriceRange(
+            @Param("categoryName") String categoryName,
+            @Param("brand") String brand,
+            @Param("keyword") String keyword,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            Pageable pageable);
+
     @Query("SELECT p FROM Product p " +
            "JOIN p.category c " +
            "WHERE p.active = true " +

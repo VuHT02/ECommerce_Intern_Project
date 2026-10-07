@@ -60,10 +60,12 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ProductResponse> searchProducts(String categoryName, String keyword, BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
+    public Page<ProductResponse> searchProducts(String categoryName, String keyword, String brand, BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
         String catParam = (categoryName != null && !categoryName.trim().isEmpty()) ? categoryName.trim() : "";
         String kwParam = (keyword != null && !keyword.trim().isEmpty()) ? keyword.trim() : "";
-        return productRepository.searchByCategoryAndNameAndPriceRange(catParam, kwParam, minPrice, maxPrice, pageable)
+        String brandParam = (brand != null && !brand.trim().isEmpty()) ? brand.trim() : "";
+
+        return productRepository.searchByCategoryAndBrandAndNameAndPriceRange(catParam, brandParam, kwParam, minPrice, maxPrice, pageable)
                 .map(this::mapToResponse);
     }
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ShoppingBag, Check, Laptop, Sparkles } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { formatCurrency } from '../utils/format';
@@ -18,6 +19,7 @@ export default function ProductCard({ product }) {
 
   const handleAddToCart = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     if (isOutOfStock) return;
 
     addToCart(product, 1);
@@ -28,7 +30,10 @@ export default function ProductCard({ product }) {
   return (
     <div className="group relative bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col overflow-hidden">
       {/* Khung hình ảnh */}
-      <div className="relative w-full pt-[75%] bg-slate-50 overflow-hidden flex items-center justify-center">
+      <Link
+        to={`/products/${product.id}`}
+        className="relative w-full pt-[75%] bg-slate-50 overflow-hidden flex items-center justify-center block"
+      >
         {product.imageUrl && !imageError ? (
           <img
             src={product.imageUrl}
@@ -60,7 +65,7 @@ export default function ProductCard({ product }) {
             </span>
           )}
         </div>
-      </div>
+      </Link>
 
       {/* Nội dung thông tin */}
       <div className="p-5 flex-1 flex flex-col justify-between">
@@ -73,12 +78,14 @@ export default function ProductCard({ product }) {
           )}
 
           {/* Tên sản phẩm */}
-          <h3
-            className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug mb-2"
-            title={product.name}
-          >
-            {product.name}
-          </h3>
+          <Link to={`/products/${product.id}`} className="block">
+            <h3
+              className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug mb-2"
+              title={product.name}
+            >
+              {product.name}
+            </h3>
+          </Link>
 
           {/* Tồn kho */}
           <div className="text-[12px] text-slate-400 mb-3">

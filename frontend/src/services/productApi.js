@@ -8,18 +8,21 @@ import { apiClient } from './api';
  * - getCategories: Lấy cây danh mục sản phẩm
  */
 export const productApi = {
-  // 1. Lấy danh sách sản phẩm có phân trang & tìm kiếm
-  getProducts: async ({ page = 0, size = 12, keyword = '', categoryId = null, minPrice, maxPrice } = {}) => {
+  // 1. Lấy danh sách sản phẩm có phân trang & tìm kiếm nâng cao
+  getProducts: async ({ page = 0, size = 12, keyword = '', brand = '', categoryName = '', categoryId = null, minPrice, maxPrice } = {}) => {
     const queryParams = new URLSearchParams();
     queryParams.append('page', page);
     queryParams.append('size', size);
 
     if (keyword) queryParams.append('keyword', keyword);
+    if (brand) queryParams.append('brand', brand);
+    if (categoryName) queryParams.append('categoryName', categoryName);
     if (categoryId) queryParams.append('categoryId', categoryId);
-    if (minPrice !== undefined && minPrice !== null) queryParams.append('minPrice', minPrice);
-    if (maxPrice !== undefined && maxPrice !== null) queryParams.append('maxPrice', maxPrice);
+    if (minPrice !== undefined && minPrice !== null && minPrice !== '') queryParams.append('minPrice', minPrice);
+    if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '') queryParams.append('maxPrice', maxPrice);
 
-    const endpoint = keyword || categoryId || minPrice || maxPrice
+    const hasFilters = keyword || brand || categoryName || categoryId || (minPrice !== undefined && minPrice !== null && minPrice !== '') || (maxPrice !== undefined && maxPrice !== null && maxPrice !== '');
+    const endpoint = hasFilters
       ? `/products/search?${queryParams.toString()}`
       : `/products?${queryParams.toString()}`;
 

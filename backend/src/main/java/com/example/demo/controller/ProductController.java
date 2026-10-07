@@ -68,6 +68,7 @@ public class ProductController {
     public ResponseEntity<ApiResponse<Page<ProductResponse>>> searchProducts(
             @RequestParam(required = false, defaultValue = "") String categoryName,
             @RequestParam(required = false, defaultValue = "") String keyword,
+            @RequestParam(required = false, defaultValue = "") String brand,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(defaultValue = "0") int page,
@@ -80,7 +81,7 @@ public class ProductController {
 
         return ResponseEntity.ok(
                 ApiResponse.success("Tìm kiếm sản phẩm thành công",
-                        productService.searchProducts(categoryName, keyword, minPrice, maxPrice, pageable))
+                        productService.searchProducts(categoryName, keyword, brand, minPrice, maxPrice, pageable))
         );
     }
 

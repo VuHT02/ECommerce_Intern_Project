@@ -11,10 +11,15 @@ import { PackageSearch } from 'lucide-react';
  * - Tự động hiển thị Skeleton Loading khi isLoading = true
  * - Hiển thị Empty State khi không có sản phẩm nào
  */
-export default function ProductList({ products = [], isLoading = false, skeletonCount = 8 }) {
+export default function ProductList({
+  products = [],
+  isLoading = false,
+  skeletonCount = 8,
+  gridClassName = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6',
+}) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className={gridClassName}>
         <ProductSkeleton count={skeletonCount} />
       </div>
     );
@@ -30,14 +35,14 @@ export default function ProductList({ products = [], isLoading = false, skeleton
           Không tìm thấy sản phẩm nào
         </h3>
         <p className="text-sm text-slate-500 max-w-md">
-          Rất tiếc, hiện tại không có sản phẩm nào phù hợp với bộ lọc hoặc từ khóa tìm kiếm của bạn. Vui lòng thử từ khóa khác.
+          Rất tiếc, hiện tại không có sản phẩm nào phù hợp với bộ lọc hoặc từ khóa tìm kiếm của bạn. Vui lòng thử từ khóa hoặc khoảng giá khác.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className={gridClassName}>
       {products.map((product) => (
         <ProductCard key={product.id} product={product} />
       ))}
