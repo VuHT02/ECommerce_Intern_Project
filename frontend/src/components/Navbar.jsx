@@ -1,9 +1,9 @@
 import { Link, NavLink } from 'react-router-dom';
 import { ShoppingCart, Laptop, Search, User } from 'lucide-react';
-import { useCart } from '../store/CartContext';
+import { useCartStore } from '../store/cartStore';
 
 export default function Navbar() {
-  const { cartCount } = useCart();
+  const totalItems = useCartStore((state) => state.getTotalItems());
 
   return (
     <header
@@ -100,7 +100,7 @@ export default function Navbar() {
             }}
           >
             <ShoppingCart size={20} />
-            {cartCount > 0 && (
+            {totalItems > 0 && (
               <span
                 style={{
                   position: 'absolute',
@@ -118,7 +118,7 @@ export default function Navbar() {
                   justifyContent: 'center',
                 }}
               >
-                {cartCount}
+                {totalItems}
               </span>
             )}
           </Link>
