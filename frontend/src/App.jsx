@@ -32,6 +32,14 @@ export default function App() {
             }
           />
           <Route
+            path="orders"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="cart"
             element={
               <ProtectedRoute>
