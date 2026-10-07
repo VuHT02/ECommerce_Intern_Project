@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
 import Layout from './components/Layout';
 import HomePage from './pages/HomePage';
 import ProductPage from './pages/ProductPage';
@@ -13,6 +14,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 export default function App() {
   return (
     <Router>
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} />
       <Routes>
         <Route path="/" element={<Layout />}>
           {/* Public Routes */}
