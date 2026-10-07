@@ -9,6 +9,8 @@ import com.example.demo.entity.Product;
 import com.example.demo.entity.User;
 import com.example.demo.exception.BadRequestException;
 import com.example.demo.exception.InsufficientStockException;
+import com.example.demo.exception.OutOfStockException;
+import com.example.demo.exception.ProductNotFoundException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.CartItemRepository;
 import com.example.demo.repository.CartRepository;
@@ -48,15 +50,14 @@ public class CartServiceImpl implements CartService {
         }
 
         Product product = productRepository.findById(request.getProductId())
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sản phẩm với ID: " + request.getProductId()));
+                .orElseThrow(() -> new ProductNotFoundException(request.getProductId()));
 
         if (!product.isActive()) {
             throw new BadRequestException("Sản phẩm '" + product.getName() + "' hiện không còn kinh doanh!");
         }
 
         if (product.getStockQuantity() < request.getQuantity()) {
-            throw new InsufficientStockException("Sản phẩm '" + product.getName() + "' chỉ còn " 
-                    + product.getStockQuantity() + " chiếc trong kho!");
+            throw new OutOfStockException(product.getName(), product.getStockQuantity(), request.getQuantity());
         }
 
         Cart cart = getOrCreateCart(userId);
@@ -66,8 +67,7 @@ public class CartServiceImpl implements CartService {
             CartItem item = existingItemOpt.get();
             int newQuantity = item.getQuantity() + request.getQuantity();
             if (newQuantity > product.getStockQuantity()) {
-                throw new InsufficientStockException("Số lượng trong giỏ (" + newQuantity 
-                        + ") vượt quá số lượng tồn kho (" + product.getStockQuantity() + ")!");
+                throw new OutOfStockException(product.getName(), product.getStockQuantity(), newQuantity);
             }
             item.setQuantity(newQuantity);
             cartItemRepository.save(item);

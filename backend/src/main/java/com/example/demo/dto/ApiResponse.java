@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 /**
  * Wrapper chuẩn hóa toàn bộ phản hồi JSON của API.
  * Mọi endpoint đều trả về cấu trúc nhất quán:
- * { "success": true/false, "message": "...", "data": {...}, "timestamp": "..." }
+ * { "success": true/false, "message": "...", "data": {...}, "errors": {...}, "timestamp": "..." }
  */
 @Data
 @Builder
@@ -23,11 +23,12 @@ public class ApiResponse<T> {
     private boolean success;
     private String message;
     private T data;
+    private Object errors; // Chứa chi tiết validation errors hoặc context lỗi (nếu có)
 
     @Builder.Default
     private LocalDateTime timestamp = LocalDateTime.now();
 
-    // Factory methods tiện lợi
+    // Factory methods thành công
     public static <T> ApiResponse<T> success(T data) {
         return ApiResponse.<T>builder()
                 .success(true)
@@ -44,10 +45,19 @@ public class ApiResponse<T> {
                 .build();
     }
 
+    // Factory methods báo lỗi
     public static <T> ApiResponse<T> error(String message) {
         return ApiResponse.<T>builder()
                 .success(false)
                 .message(message)
+                .build();
+    }
+
+    public static <T> ApiResponse<T> error(String message, Object errors) {
+        return ApiResponse.<T>builder()
+                .success(false)
+                .message(message)
+                .errors(errors)
                 .build();
     }
 }

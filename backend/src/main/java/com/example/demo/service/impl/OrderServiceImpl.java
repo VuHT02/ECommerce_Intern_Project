@@ -13,6 +13,8 @@ import com.example.demo.entity.User;
 import com.example.demo.entity.Voucher;
 import com.example.demo.exception.BadRequestException;
 import com.example.demo.exception.InsufficientStockException;
+import com.example.demo.exception.OutOfStockException;
+import com.example.demo.exception.ProductNotFoundException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.CartItemRepository;
 import com.example.demo.repository.CartRepository;
@@ -70,8 +72,7 @@ public class OrderServiceImpl implements OrderService {
             }
 
             if (product.getStockQuantity() < cartItem.getQuantity()) {
-                throw new InsufficientStockException("Sản phẩm '" + product.getName() 
-                        + "' không đủ số lượng trong kho (chỉ còn " + product.getStockQuantity() + " chiếc)!");
+                throw new OutOfStockException(product.getName(), product.getStockQuantity(), cartItem.getQuantity());
             }
 
             BigDecimal itemTotal = product.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity()));

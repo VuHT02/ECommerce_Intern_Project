@@ -3,6 +3,7 @@ package com.example.demo.service.impl;
 import com.example.demo.dto.ApplyVoucherResponse;
 import com.example.demo.entity.Voucher;
 import com.example.demo.exception.BadRequestException;
+import com.example.demo.exception.InvalidVoucherException;
 import com.example.demo.repository.VoucherRepository;
 import com.example.demo.service.VoucherService;
 import lombok.RequiredArgsConstructor;
@@ -37,10 +38,10 @@ public class VoucherServiceImpl implements VoucherService {
 
         LocalDateTime now = LocalDateTime.now();
         Voucher voucher = voucherRepository.findValidVoucher(voucherCode.trim().toUpperCase(), now)
-                .orElseThrow(() -> new BadRequestException("Mã giảm giá '" + voucherCode + "' không tồn tại, đã hết hạn hoặc hết lượt dùng!"));
+                .orElseThrow(() -> new InvalidVoucherException("Mã giảm giá '" + voucherCode + "' không tồn tại, đã hết hạn hoặc hết lượt dùng!"));
 
         if (voucher.getMinOrderValue() != null && subtotal.compareTo(voucher.getMinOrderValue()) < 0) {
-            throw new BadRequestException("Mã '" + voucher.getCode() + "' yêu cầu đơn hàng tối thiểu từ " 
+            throw new InvalidVoucherException("Mã '" + voucher.getCode() + "' yêu cầu đơn hàng tối thiểu từ " 
                     + voucher.getMinOrderValue().stripTrailingZeros().toPlainString() + " đ!");
         }
 
@@ -79,7 +80,7 @@ public class VoucherServiceImpl implements VoucherService {
         Voucher voucher = voucherRepository.findByIdWithPessimisticLock(voucherId)
                 .orElseThrow(() -> new BadRequestException("Voucher không tồn tại!"));
         if (voucher.getUsageLimit() != null && voucher.getUsedCount() >= voucher.getUsageLimit()) {
-            throw new BadRequestException("Mã giảm giá đã hết lượt sử dụng!");
+            throw new InvalidVoucherException("Mã giảm giá đã hết lượt sử dụng!");
         }
         voucher.setUsedCount(voucher.getUsedCount() + 1);
         voucherRepository.save(voucher);
