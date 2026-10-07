@@ -25,6 +25,7 @@ IF OBJECT_ID('dbo.ProductImages', 'U') IS NOT NULL DROP TABLE dbo.ProductImages;
 IF OBJECT_ID('dbo.Products', 'U') IS NOT NULL DROP TABLE dbo.Products;
 IF OBJECT_ID('dbo.Categories', 'U') IS NOT NULL DROP TABLE dbo.Categories;
 IF OBJECT_ID('dbo.Vouchers', 'U') IS NOT NULL DROP TABLE dbo.Vouchers;
+IF OBJECT_ID('dbo.RefreshTokens', 'U') IS NOT NULL DROP TABLE dbo.RefreshTokens;
 IF OBJECT_ID('dbo.Users', 'U') IS NOT NULL DROP TABLE dbo.Users;
 GO
 
@@ -43,6 +44,17 @@ CREATE TABLE dbo.Users (
     IsActive BIT NOT NULL DEFAULT 1,
     CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     UpdatedAt DATETIME2 NULL
+);
+GO
+
+-- [Bảng 1B]: RefreshTokens - Lưu trữ token làm mới phiên đăng nhập (Quan hệ 1-1 với User)
+CREATE TABLE dbo.RefreshTokens (
+    RefreshTokenId BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId BIGINT NOT NULL UNIQUE,
+    Token NVARCHAR(512) NOT NULL UNIQUE,
+    ExpiryDate DATETIMEOFFSET NOT NULL,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_RefreshTokens_User FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId) ON DELETE CASCADE
 );
 GO
 

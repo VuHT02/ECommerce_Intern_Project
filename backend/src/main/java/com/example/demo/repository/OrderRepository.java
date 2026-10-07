@@ -21,4 +21,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Page<Order> findByUserId(Long userId, Pageable pageable);
 
     List<Order> findByStatus(String status);
+
+    List<Order> findByPaymentStatusAndPaymentMethodAndStatusAndCreatedAtBefore(
+            String paymentStatus, String paymentMethod, String status, java.time.LocalDateTime threshold);
 }
