@@ -1,18 +1,36 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Check, Laptop, Sparkles } from 'lucide-react';
+import { ShoppingBag, Check, Laptop, ShieldCheck } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { formatCurrency } from '../utils/format';
+import { getFallbackProductImage, getProductImageUrl } from '../utils/productImage';
+import { repairVietnameseLabel } from '../utils/vietnameseText';
 
 /**
- * Thẻ hiển thị sản phẩm (ProductCard) chuẩn E-Commerce công nghệ:
- * - Hiển thị hình ảnh với hiệu ứng zoom mượt mà khi hover
- * - Tên sản phẩm, thương hiệu, danh mục và giá tiền định dạng VNĐ
- * - Nút "Thêm vào giỏ hàng" kết nối với Zustand useCartStore kèm feedback visual
+ * Thẻ hiển thị sản phẩm (ProductCard) cao cấp chuẩn E-Commerce công nghệ:
+ * - Khung hình ảnh cố định h-52 với nền gradient nhẹ, chống vỡ layout
+ * - Hiển thị ảnh sắc nét kèm hiệu ứng hover zoom mượt mà
+ * - Tên sản phẩm, thương hiệu, danh mục font Inter tiếng Việt chuẩn 100%
+ * - Nút "Thêm vào giỏ hàng" thiết kế sang trọng, phản hồi trực quan khi bấm
  */
 export default function ProductCard({ product }) {
   const [added, setAdded] = useState(false);
-  const [imageError, setImageError] = useState(false);
+  const imageKey = JSON.stringify([
+    product.id,
+    product.imageUrl,
+    product.brand,
+    product.name,
+    product.slug,
+    product.categoryName,
+  ]);
+  const [imageState, setImageState] = useState(() => ({
+    key: imageKey,
+    src: getProductImageUrl(product),
+    error: false,
+  }));
+  const hasCurrentImageState = imageState.key === imageKey;
+  const imageSrc = hasCurrentImageState ? imageState.src : getProductImageUrl(product);
+  const imageError = hasCurrentImageState && imageState.error;
   const addToCart = useCartStore((state) => state.addToCart);
 
   const isOutOfStock = product.stockQuantity <= 0;
@@ -24,109 +42,124 @@ export default function ProductCard({ product }) {
 
     addToCart(product, 1);
     setAdded(true);
-    setTimeout(() => setAdded(false), 1500);
+    setTimeout(() => setAdded(false), 1600);
   };
 
   return (
-    <div className="group relative bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col overflow-hidden">
-      {/* Khung hình ảnh */}
+    <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col overflow-hidden">
+      {/* ── KHUNG HÌNH ẢNH SẢN PHẨM ── */}
       <Link
         to={`/products/${product.id}`}
-        className="relative w-full pt-[75%] bg-slate-50 overflow-hidden flex items-center justify-center block"
+        className="relative w-full h-52 bg-slate-50 flex items-center justify-center overflow-hidden border-b border-slate-100 block"
       >
-        {product.imageUrl && !imageError ? (
+        {imageSrc && !imageError ? (
           <img
-            src={product.imageUrl}
+            src={imageSrc}
             alt={product.name}
-            onError={() => setImageError(true)}
-            className="absolute inset-0 w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500 ease-out"
+            referrerPolicy="no-referrer"
+            onError={() => {
+              const fallback = getFallbackProductImage(product);
+              if (imageSrc !== fallback) {
+                setImageState({ key: imageKey, src: fallback, error: false });
+              } else {
+                setImageState({ key: imageKey, src: fallback, error: true });
+              }
+            }}
+            className="w-full h-full object-contain p-5 group-hover:scale-105 transition-transform duration-500 ease-out"
           />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
-            <Laptop size={48} strokeWidth={1.5} />
-            <span className="text-[11px] font-medium mt-1">Chưa có ảnh</span>
+          <div className="flex flex-col items-center justify-center text-slate-300">
+            <Laptop size={44} strokeWidth={1.5} />
+            <span className="text-xs font-medium text-slate-400 mt-1">TechZone</span>
           </div>
         )}
 
-        {/* Badges trên ảnh */}
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+        {/* Badges góc trên */}
+        <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
           {product.brand && (
-            <span className="bg-white/90 backdrop-blur-md text-slate-700 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-sm border border-slate-200/50">
+            <span className="bg-white/95 backdrop-blur-md text-slate-800 text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-xs border border-slate-200/60">
               {product.brand}
             </span>
           )}
+        </div>
+
+        <div className="absolute top-3 right-3 z-10">
           {isOutOfStock ? (
-            <span className="bg-rose-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow-sm">
+            <span className="bg-rose-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-xs">
               Hết hàng
             </span>
           ) : (
-            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold px-2 py-0.5 rounded-md flex items-center gap-1">
-              <Sparkles size={10} /> Chính hãng
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+              <ShieldCheck size={11} /> Chính hãng
             </span>
           )}
         </div>
       </Link>
 
-      {/* Nội dung thông tin */}
-      <div className="p-5 flex-1 flex flex-col justify-between">
+      {/* ── THÔNG TIN SẢN PHẨM ── */}
+      <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between">
         <div>
           {/* Tên danh mục */}
           {product.categoryName && (
-            <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider mb-1">
-              {product.categoryName}
+            <p className="text-xs font-semibold text-blue-600 mb-1.5 truncate">
+              {repairVietnameseLabel(product.categoryName)}
             </p>
           )}
 
           {/* Tên sản phẩm */}
-          <Link to={`/products/${product.id}`} className="block">
+          <Link to={`/products/${product.id}`} className="block group-hover:text-blue-600 transition-colors">
             <h3
-              className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug mb-2"
+              className="text-sm font-bold text-slate-800 line-clamp-2 leading-snug min-h-[2.5rem]"
               title={product.name}
             >
-              {product.name}
+              {repairVietnameseLabel(product.name)}
             </h3>
           </Link>
 
-          {/* Tồn kho */}
-          <div className="text-[12px] text-slate-400 mb-3">
+          {/* Tồn kho & Đánh giá */}
+          <div className="flex items-center justify-between text-xs text-slate-500 mt-2.5 mb-4">
             {!isOutOfStock ? (
-              <span>Còn lại: <strong className="text-slate-600 font-semibold">{product.stockQuantity}</strong> chiếc</span>
+              <span className="text-slate-500">
+                Còn lại: <strong className="text-slate-700 font-semibold">{product.stockQuantity}</strong>
+              </span>
             ) : (
-              <span className="text-rose-500 font-medium">Tạm thời hết hàng</span>
+              <span className="text-rose-500 font-medium">Tạm hết hàng</span>
             )}
+            <span className="text-[11px] text-slate-400">Trả góp 0%</span>
           </div>
         </div>
 
-        {/* Giá & Nút hành động */}
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-auto">
-          <div>
-            <span className="text-xs text-slate-400 block">Giá niêm yết</span>
-            <span className="text-base sm:text-lg font-extrabold text-blue-600 tracking-tight">
+        {/* ── GIÁ & NÚT THÊM GIỎ HÀNG ── */}
+        <div className="pt-3 border-t border-slate-100 flex items-end justify-between gap-2 mt-auto">
+          <div className="min-w-0">
+            <span className="text-[11px] text-slate-400 block font-medium">Giá ưu đãi</span>
+            <span className="text-base sm:text-lg font-black text-blue-600 tracking-tight block truncate">
               {formatCurrency(product.price)}
             </span>
           </div>
 
           <button
+            type="button"
             onClick={handleAddToCart}
             disabled={isOutOfStock}
-            className={`flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 shadow-sm ${
+            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all duration-200 shadow-xs shrink-0 whitespace-nowrap ${
               isOutOfStock
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                 : added
                 ? 'bg-emerald-600 text-white shadow-emerald-500/20'
-                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 hover:scale-105 active:scale-95'
+                : 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-blue-500/20'
             }`}
             title={isOutOfStock ? 'Sản phẩm tạm thời hết hàng' : 'Thêm sản phẩm vào giỏ'}
           >
             {added ? (
               <>
-                <Check size={15} strokeWidth={2.5} />
+                <Check size={14} strokeWidth={2.5} />
                 <span>Đã thêm</span>
               </>
             ) : (
               <>
-                <ShoppingBag size={15} />
-                <span>{isOutOfStock ? 'Hết hàng' : 'Thêm vào giỏ hàng'}</span>
+                <ShoppingBag size={14} />
+                <span>Thêm</span>
               </>
             )}
           </button>

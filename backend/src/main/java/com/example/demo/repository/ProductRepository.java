@@ -51,14 +51,16 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      * và khoảng giá linh hoạt (minPrice/maxPrice có thể null).
      */
     @Query("SELECT p FROM Product p " +
-           "JOIN p.category c " +
+           "LEFT JOIN p.category c " +
            "WHERE p.active = true " +
+           "AND (:categoryId IS NULL OR c.id = :categoryId OR c.parentCategory.id = :categoryId) " +
            "AND (:categoryName = '' OR LOWER(c.name) LIKE LOWER(CONCAT('%', :categoryName, '%'))) " +
            "AND (:brand = '' OR LOWER(p.brand) LIKE LOWER(CONCAT('%', :brand, '%'))) " +
            "AND (:keyword = '' OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
            "AND (:minPrice IS NULL OR p.price >= :minPrice) " +
            "AND (:maxPrice IS NULL OR p.price <= :maxPrice)")
     Page<Product> searchByCategoryAndBrandAndNameAndPriceRange(
+            @Param("categoryId") Long categoryId,
             @Param("categoryName") String categoryName,
             @Param("brand") String brand,
             @Param("keyword") String keyword,

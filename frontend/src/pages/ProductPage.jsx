@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  SlidersHorizontal,
   AlertCircle,
   RefreshCw,
   ChevronLeft,
@@ -11,19 +10,21 @@ import {
   Tag,
   DollarSign,
   Search as SearchIcon,
+  Sparkles,
 } from 'lucide-react';
 import { useProducts, useCategories } from '../hooks/useProducts';
 import ProductList from '../components/ProductList';
 import ProductFilterSidebar from '../components/ProductFilterSidebar';
 import { formatCurrency } from '../utils/format';
+import { repairVietnameseLabel } from '../utils/vietnameseText';
 
 /**
- * Trang Danh Sách Sản Phẩm (ProductPage):
+ * Trang Danh Sách Sản Phẩm (ProductPage) đẳng cấp:
  * - Layout 2 cột: Sidebar Bộ Lọc bên trái & Danh sách sản phẩm bên phải
  * - Đồng bộ hóa toàn bộ tham số lọc lên URL qua `useSearchParams` của React Router
  * - Khi reload trang (F5): Giữ nguyên từ khóa, hãng đã chọn, khoảng giá và phân trang
  * - Hỗ trợ thanh Tag các bộ lọc đang kích hoạt (Active Filter Chips)
- * - Tối ưu cho Mobile với Drawer / Toggle Sidebar
+ * - Tối ưu cho Mobile với Drawer Bộ Lọc
  */
 export default function ProductPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,25 +44,39 @@ export default function ProductPage() {
     return brand ? brand.split(',').filter(Boolean) : [];
   }, [brand]);
 
+  // Chuẩn hóa tham số sắp xếp gửi lên Server API
+  const apiSortBy = sortBy === 'price-asc' || sortBy === 'price-desc' ? 'price' : 'createdAt';
+  const apiSortDir = sortBy === 'price-asc' ? 'asc' : 'desc';
+
   // Fetch danh sách sản phẩm qua TanStack Query theo các tham số từ URL
   const { data, isLoading, isError, error, refetch, isFetching } = useProducts({
     page,
     size: 12,
     keyword,
-    brand: selectedBrands.length === 1 ? selectedBrands[0] : '', // Gửi lên backend nếu chọn 1 hãng
-    categoryId,
+    brand: selectedBrands.length === 1 ? selectedBrands[0] : '',
+    categoryId: categoryId ? Number(categoryId) : null,
     minPrice: minPrice || undefined,
     maxPrice: maxPrice || undefined,
+    sortBy: apiSortBy,
+    sortDir: apiSortDir,
   });
 
-  // Fetch danh mục phục vụ Tab phân loại
+  // Fetch danh mục phục vụ Tab phân loại (danh sách phẳng, ưu tiên danh mục con)
   const { data: categoriesData } = useCategories();
-  const categories = Array.isArray(categoriesData) ? categoriesData : [];
+  const categories = useMemo(() => {
+    const all = Array.isArray(categoriesData) ? categoriesData : [];
+    const children = all.filter((cat) => cat.parentCategoryId);
+    return children.length > 0 ? children : all;
+  }, [categoriesData]);
 
   // Trích xuất mảng sản phẩm từ Page Response của Spring Boot
-  const rawProducts = data?.content || (Array.isArray(data) ? data : []);
+  const rawProducts = useMemo(
+    () => data?.content || (Array.isArray(data) ? data : []),
+    [data]
+  );
 
   // Lọc an toàn Client-side nếu người dùng chọn cùng lúc nhiều thương hiệu (Apple + Asus...)
+  // Thứ tự sắp xếp giữ nguyên 100% từ Server để đảm bảo tính đồng bộ qua tất cả các trang
   const filteredProducts = useMemo(() => {
     let list = [...rawProducts];
 
@@ -73,15 +88,8 @@ export default function ProductPage() {
       );
     }
 
-    // Sắp xếp
-    if (sortBy === 'price-asc') {
-      list.sort((a, b) => Number(a.price) - Number(b.price));
-    } else if (sortBy === 'price-desc') {
-      list.sort((a, b) => Number(b.price) - Number(a.price));
-    }
-
     return list;
-  }, [rawProducts, selectedBrands, sortBy]);
+  }, [rawProducts, selectedBrands]);
 
   const totalPages = data?.totalPages || 1;
   const totalElements = data?.totalElements ?? filteredProducts.length;
@@ -94,11 +102,11 @@ export default function ProductPage() {
     } else {
       next.delete(key);
     }
-    next.delete('page'); // Reset về trang 0 khi thay đổi lọc/sắp xếp
+    next.delete('page'); // Reset về trang 0 khi thay đổi lọc
     setSearchParams(next, { replace: true });
   };
 
-  // Chuyển trang (giữ nguyên các query params hiện tại trên URL)
+  // Chuyển trang
   const handlePageChange = (newPage) => {
     const next = new URLSearchParams(searchParams);
     if (newPage > 0) {
@@ -124,57 +132,57 @@ export default function ProductPage() {
     next.delete('page');
     setSearchParams(next, { replace: true });
   };
-  const handleRemoveCategory = () => updateQueryParam('categoryId', '');
 
   return (
-    <div className="min-h-screen bg-slate-50/50 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50/60 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* HEADER TRANG */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4 border-b border-slate-200">
+
+        {/* ── HEADER KHÔNG GIAN SẢN PHẨM ── */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold mb-2">
-              <SlidersHorizontal size={13} />
-              Cửa Hàng Trực Tuyến
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold mb-3">
+              <Sparkles size={13} />
+              <span>Sản phẩm chính hãng</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Danh Sách Sản Phẩm
+              Khám Phá Thiết Bị Công Nghệ
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Khám phá máy tính xách tay, điện thoại và thiết bị công nghệ chính hãng với giá tốt nhất.
+            <p className="text-sm text-slate-500 mt-1.5 max-w-2xl">
+              Danh mục máy tính xách tay, điện thoại và phụ kiện chính hãng kèm bảo hành 24 tháng toàn quốc.
             </p>
           </div>
 
-          {/* Nút mở bộ lọc trên Mobile */}
+          {/* Nút lọc Mobile + Đếm số lượng */}
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileFilterOpen(true)}
-              className="lg:hidden inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+              className="lg:hidden inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-sm"
             >
-              <Filter size={15} className="text-blue-600" />
-              <span>Bộ lọc & Tìm kiếm</span>
+              <Filter size={14} />
+              <span>Bộ lọc</span>
               {(keyword || selectedBrands.length > 0 || minPrice || maxPrice) && (
-                <span className="w-2 h-2 rounded-full bg-blue-600" />
+                <span className="w-2 h-2 rounded-full bg-blue-400" />
               )}
             </button>
 
-            <div className="text-xs sm:text-sm text-slate-500">
-              Tìm thấy <strong className="text-slate-800">{filteredProducts.length}</strong> /{' '}
-              <strong className="text-slate-800">{totalElements}</strong> sản phẩm
+            <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-600">
+              Hiển thị <strong className="text-slate-900">{filteredProducts.length}</strong> /{' '}
+              <strong className="text-slate-900">{totalElements}</strong> sản phẩm
             </div>
           </div>
         </div>
 
-        {/* THANH DANH MỤC NHANH (TABS) */}
+        {/* ── TABS DANH MỤC NHANH ── */}
         {categories.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               type="button"
               onClick={() => updateQueryParam('categoryId', '')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
                 !categoryId
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                  : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
               }`}
             >
               Tất cả danh mục
@@ -184,35 +192,35 @@ export default function ProductPage() {
                 key={cat.id}
                 type="button"
                 onClick={() => updateQueryParam('categoryId', String(cat.id))}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
                   categoryId === String(cat.id)
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                 }`}
               >
-                {cat.name}
+                {repairVietnameseLabel(cat.name)}
               </button>
             ))}
           </div>
         )}
 
-        {/* LAYOUT CHÍNH: SIDEBAR TRÁI + GRID SẢN PHẨM PHẢI */}
-        <div className="flex flex-col lg:flex-row gap-8 items-start">
-          {/* 1. SIDEBAR BỘ LỌC (DESKTOP) */}
-          <div className="hidden lg:block w-72 flex-shrink-0 sticky top-24">
+        {/* ── BỐ CỤC CHÍNH: 2 CỘT ── */}
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          {/* Cột 1: Sidebar lọc Desktop */}
+          <div className="hidden lg:block w-72 shrink-0 sticky top-24">
             <ProductFilterSidebar />
           </div>
 
-          {/* 1.1. MODAL DRAWER BỘ LỌC CHO MOBILE / TABLET */}
+          {/* Drawer Lọc Mobile */}
           {mobileFilterOpen && (
             <div className="fixed inset-0 z-50 flex lg:hidden">
               <div
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+                className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
                 onClick={() => setMobileFilterOpen(false)}
               />
-              <div className="relative ml-auto w-full max-w-xs h-full bg-white p-6 shadow-2xl overflow-y-auto">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-                  <h3 className="font-extrabold text-slate-900 text-base">Bộ Lọc & Tìm Kiếm</h3>
+              <div className="relative ml-auto w-full max-w-xs h-full bg-white p-5 shadow-2xl overflow-y-auto">
+                <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 mb-4">
+                  <h3 className="font-bold text-slate-900 text-base">Bộ Lọc Tìm Kiếm</h3>
                   <button
                     type="button"
                     onClick={() => setMobileFilterOpen(false)}
@@ -226,15 +234,14 @@ export default function ProductPage() {
             </div>
           )}
 
-          {/* 2. CỘT CHÍNH: THANH CÔNG CỤ + FILTER CHIPS + GRID SẢN PHẨM */}
+          {/* Cột 2: Danh sách sản phẩm & Toolbar */}
           <div className="flex-1 min-w-0 w-full space-y-4">
-            {/* Toolbar: Sắp xếp */}
-            <div className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-sm flex flex-wrap items-center justify-between gap-3">
-              {/* Chips hiển thị các bộ lọc đang kích hoạt */}
+            {/* Toolbar: Filter chips & Sắp xếp */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+              {/* Chips bộ lọc kích hoạt */}
               <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
                 <span className="text-xs text-slate-400 font-medium mr-1">Bộ lọc:</span>
 
-                {/* Chip Từ khóa */}
                 {keyword && (
                   <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-lg border border-blue-200">
                     <SearchIcon size={11} />
@@ -242,14 +249,13 @@ export default function ProductPage() {
                     <button
                       type="button"
                       onClick={handleRemoveKeyword}
-                      className="hover:text-rose-600 ml-0.5"
+                      className="hover:text-rose-600 ml-1"
                     >
                       <X size={12} />
                     </button>
                   </span>
                 )}
 
-                {/* Chips Hãng */}
                 {selectedBrands.map((b) => (
                   <span
                     key={b}
@@ -260,14 +266,13 @@ export default function ProductPage() {
                     <button
                       type="button"
                       onClick={() => handleRemoveBrand(b)}
-                      className="hover:text-rose-600 ml-0.5"
+                      className="hover:text-rose-600 ml-1"
                     >
                       <X size={12} />
                     </button>
                   </span>
                 ))}
 
-                {/* Chip Khoảng giá */}
                 {(minPrice || maxPrice) && (
                   <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-200">
                     <DollarSign size={11} />
@@ -278,16 +283,15 @@ export default function ProductPage() {
                     <button
                       type="button"
                       onClick={handleRemovePrice}
-                      className="hover:text-rose-600 ml-0.5"
+                      className="hover:text-rose-600 ml-1"
                     >
                       <X size={12} />
                     </button>
                   </span>
                 )}
 
-                {/* Không có bộ lọc nào */}
                 {!keyword && selectedBrands.length === 0 && !minPrice && !maxPrice && (
-                  <span className="text-xs text-slate-400 italic">Mặc định</span>
+                  <span className="text-xs text-slate-400 italic">Tất cả sản phẩm</span>
                 )}
               </div>
 
@@ -309,11 +313,11 @@ export default function ProductPage() {
               </div>
             </div>
 
-            {/* Xử lý Error State */}
+            {/* Thông báo lỗi */}
             {isError && (
-              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <AlertCircle size={28} className="text-rose-500 flex-shrink-0" />
+                  <AlertCircle size={24} className="text-rose-500 shrink-0" />
                   <div>
                     <h4 className="text-sm font-bold text-rose-900">Không thể tải dữ liệu sản phẩm</h4>
                     <p className="text-xs text-rose-600 mt-0.5">
@@ -326,30 +330,30 @@ export default function ProductPage() {
                   onClick={() => refetch()}
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-colors whitespace-nowrap"
                 >
-                  <RefreshCw size={14} /> Thử lại
+                  <RefreshCw size={13} /> Thử lại
                 </button>
               </div>
             )}
 
-            {/* DANH SÁCH SẢN PHẨM (GRID RESPONSIVE 1 CỘT MOBILE, 2 CỘT TABLET, 3-4 CỘT PC) */}
+            {/* Danh sách sản phẩm dạng Grid */}
             <ProductList
               products={filteredProducts}
               isLoading={isLoading || isFetching}
               skeletonCount={8}
-              gridClassName="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6"
+              gridClassName="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5"
             />
 
-            {/* PHÂN TRANG (PAGINATION) */}
+            {/* Phân trang */}
             {totalPages > 1 && !isLoading && (
-              <div className="flex items-center justify-center gap-2 pt-8 pb-12">
+              <div className="flex items-center justify-center gap-1.5 pt-6 pb-10">
                 <button
                   type="button"
                   onClick={() => handlePageChange(Math.max(page - 1, 0))}
                   disabled={page === 0}
-                  className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   title="Trang trước"
                 >
-                  <ChevronLeft size={18} />
+                  <ChevronLeft size={16} />
                 </button>
 
                 {Array.from({ length: totalPages }).map((_, idx) => (
@@ -357,9 +361,9 @@ export default function ProductPage() {
                     key={idx}
                     type="button"
                     onClick={() => handlePageChange(idx)}
-                    className={`w-9 h-9 rounded-xl text-xs font-bold transition-all ${
+                    className={`w-8 h-8 rounded-xl text-xs font-bold transition-all ${
                       page === idx
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                        ? 'bg-blue-600 text-white shadow-sm'
                         : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
@@ -371,10 +375,10 @@ export default function ProductPage() {
                   type="button"
                   onClick={() => handlePageChange(Math.min(page + 1, totalPages - 1))}
                   disabled={page >= totalPages - 1}
-                  className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   title="Trang tiếp"
                 >
-                  <ChevronRight size={18} />
+                  <ChevronRight size={16} />
                 </button>
               </div>
             )}

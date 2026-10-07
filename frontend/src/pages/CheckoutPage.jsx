@@ -395,6 +395,7 @@ export default function CheckoutPage() {
                           <img
                             src={item.imageUrl}
                             alt={item.name}
+                            referrerPolicy="no-referrer"
                             className="w-full h-full object-contain"
                           />
                         ) : (

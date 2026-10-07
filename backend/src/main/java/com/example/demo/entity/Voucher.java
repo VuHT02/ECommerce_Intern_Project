@@ -13,7 +13,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.generator.EventType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -72,7 +74,8 @@ public class Voucher {
     private boolean active = true;
 
     @Version
-    @Column(name = "RowVersion", columnDefinition = "rowversion")
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
+    @Column(name = "RowVersion", columnDefinition = "rowversion", insertable = false, updatable = false)
     private byte[] rowVersion;
 
     @CreationTimestamp

@@ -144,6 +144,7 @@ export default function CartPage() {
                           <img
                             src={item.imageUrl}
                             alt={item.name}
+                            referrerPolicy="no-referrer"
                             className="w-full h-full object-contain"
                           />
                         ) : (
@@ -176,7 +177,8 @@ export default function CartPage() {
                         <button
                           type="button"
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="p-2 text-slate-600 hover:bg-slate-200 transition-colors"
+                          disabled={item.quantity <= 1}
+                          className="p-2 text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           title="Giảm số lượng"
                         >
                           <Minus size={13} />

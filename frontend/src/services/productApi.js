@@ -8,8 +8,19 @@ import { apiClient } from './api';
  * - getCategories: Lấy cây danh mục sản phẩm
  */
 export const productApi = {
-  // 1. Lấy danh sách sản phẩm có phân trang & tìm kiếm nâng cao
-  getProducts: async ({ page = 0, size = 12, keyword = '', brand = '', categoryName = '', categoryId = null, minPrice, maxPrice } = {}) => {
+  // 1. Lấy danh sách sản phẩm có phân trang, tìm kiếm & sắp xếp
+  getProducts: async ({
+    page = 0,
+    size = 12,
+    keyword = '',
+    brand = '',
+    categoryName = '',
+    categoryId = null,
+    minPrice,
+    maxPrice,
+    sortBy = 'createdAt',
+    sortDir = 'desc',
+  } = {}) => {
     const queryParams = new URLSearchParams();
     queryParams.append('page', page);
     queryParams.append('size', size);
@@ -20,6 +31,8 @@ export const productApi = {
     if (categoryId) queryParams.append('categoryId', categoryId);
     if (minPrice !== undefined && minPrice !== null && minPrice !== '') queryParams.append('minPrice', minPrice);
     if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '') queryParams.append('maxPrice', maxPrice);
+    if (sortBy) queryParams.append('sortBy', sortBy);
+    if (sortDir) queryParams.append('sortDir', sortDir);
 
     const hasFilters = keyword || brand || categoryName || categoryId || (minPrice !== undefined && minPrice !== null && minPrice !== '') || (maxPrice !== undefined && maxPrice !== null && maxPrice !== '');
     const endpoint = hasFilters
@@ -42,8 +55,14 @@ export const productApi = {
     return res.data;
   },
 
-  // 4. Lấy cây danh mục sản phẩm (Menu đa cấp)
+  // 4. Lấy danh sách phẳng danh mục (tab lọc trang sản phẩm)
   getCategories: async () => {
+    const res = await apiClient('/categories/all');
+    return res.data;
+  },
+
+  // 5. Lấy cây danh mục đa cấp (menu)
+  getCategoryTree: async () => {
     const res = await apiClient('/categories');
     return res.data;
   },

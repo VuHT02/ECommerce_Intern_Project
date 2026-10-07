@@ -42,30 +42,28 @@ public class ProductController {
     private final ProductService productService;
 
     /**
-     * GET /api/products?page=0&size=12&sort=price,asc
-     * Lấy danh sách sản phẩm có phân trang và sắp xếp
+     * Helper tạo Pageable an toàn chống SQL injection và lỗi thuộc tính sort
      */
-    @GetMapping
-    public ResponseEntity<ApiResponse<Page<ProductResponse>>> getAllProducts(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "12") int size,
-            @RequestParam(defaultValue = "createdAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir) {
-
-        Sort sort = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
-        Pageable pageable = PageRequest.of(page, size, sort);
-
-        return ResponseEntity.ok(
-                ApiResponse.success("Lấy danh sách sản phẩm thành công", productService.getAllProducts(pageable))
-        );
+    private Pageable buildPageable(int page, int size, String sortBy, String sortDir) {
+        String cleanSortBy = "createdAt";
+        if ("price".equalsIgnoreCase(sortBy)) {
+            cleanSortBy = "price";
+        } else if ("name".equalsIgnoreCase(sortBy)) {
+            cleanSortBy = "name";
+        } else if ("id".equalsIgnoreCase(sortBy)) {
+            cleanSortBy = "id";
+        }
+        Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by(direction, cleanSortBy));
     }
 
     /**
-     * GET /api/products/search?categoryName=Laptop&keyword=MacBook&minPrice=10000000&maxPrice=50000000
-     * Tìm kiếm sản phẩm nâng cao theo danh mục, từ khóa và khoảng giá
+     * GET /api/products?page=0&size=12&sortBy=price&sortDir=asc&categoryId=1
+     * Lấy danh sách sản phẩm có phân trang, lọc và sắp xếp
      */
-    @GetMapping("/search")
-    public ResponseEntity<ApiResponse<Page<ProductResponse>>> searchProducts(
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<ProductResponse>>> getAllProducts(
+            @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false, defaultValue = "") String categoryName,
             @RequestParam(required = false, defaultValue = "") String keyword,
             @RequestParam(required = false, defaultValue = "") String brand,
@@ -73,15 +71,45 @@ public class ProductController {
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size,
-            @RequestParam(defaultValue = "price") String sortBy,
-            @RequestParam(defaultValue = "asc") String sortDir) {
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir) {
 
-        Sort sort = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
-        Pageable pageable = PageRequest.of(page, size, sort);
+        Pageable pageable = buildPageable(page, size, sortBy, sortDir);
+
+        boolean hasFilters = categoryId != null || !categoryName.isEmpty() || !keyword.isEmpty()
+                || !brand.isEmpty() || minPrice != null || maxPrice != null;
+
+        Page<ProductResponse> result = hasFilters
+                ? productService.searchProducts(categoryId, categoryName, keyword, brand, minPrice, maxPrice, pageable)
+                : productService.getAllProducts(pageable);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Lấy danh sách sản phẩm thành công", result)
+        );
+    }
+
+    /**
+     * GET /api/products/search?categoryId=1&categoryName=Laptop&keyword=MacBook&minPrice=10000000&maxPrice=50000000&sortBy=price&sortDir=asc
+     * Tìm kiếm sản phẩm nâng cao theo danh mục, từ khóa, thương hiệu, khoảng giá và sắp xếp
+     */
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<Page<ProductResponse>>> searchProducts(
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false, defaultValue = "") String categoryName,
+            @RequestParam(required = false, defaultValue = "") String keyword,
+            @RequestParam(required = false, defaultValue = "") String brand,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+
+        Pageable pageable = buildPageable(page, size, sortBy, sortDir);
 
         return ResponseEntity.ok(
                 ApiResponse.success("Tìm kiếm sản phẩm thành công",
-                        productService.searchProducts(categoryName, keyword, brand, minPrice, maxPrice, pageable))
+                        productService.searchProducts(categoryId, categoryName, keyword, brand, minPrice, maxPrice, pageable))
         );
     }
 

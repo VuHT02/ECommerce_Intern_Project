@@ -274,6 +274,7 @@ export default function ProductDetailPage() {
                 <img
                   src={selectedImage}
                   alt={product.name}
+                  referrerPolicy="no-referrer"
                   className="absolute inset-0 w-full h-full object-contain p-6 group-hover:scale-105 transition-transform duration-500 ease-out"
                 />
               ) : (
@@ -313,6 +314,7 @@ export default function ProductDetailPage() {
                     <img
                       src={img}
                       alt={`Thumbnail ${index + 1}`}
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-contain p-1.5"
                     />
                   </button>

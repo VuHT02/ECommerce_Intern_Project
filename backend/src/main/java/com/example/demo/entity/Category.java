@@ -13,6 +13,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Nationalized;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ public class Category {
     @OneToMany(mappedBy = "parentCategory")
     private List<Category> subcategories = new ArrayList<>();
 
+    @Nationalized
     @Column(name = "Name", nullable = false, length = 120)
     private String name;
 

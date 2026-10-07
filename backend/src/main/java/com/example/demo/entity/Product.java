@@ -16,7 +16,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Generated;
+import org.hibernate.annotations.Nationalized;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.generator.EventType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -45,15 +48,18 @@ public class Product {
     @Column(name = "SKU", nullable = false, unique = true, length = 50)
     private String sku;
 
+    @Nationalized
     @Column(name = "Name", nullable = false, length = 200)
     private String name;
 
     @Column(name = "Slug", nullable = false, unique = true, length = 220)
     private String slug;
 
+    @Nationalized
     @Column(name = "Description", columnDefinition = "nvarchar(max)")
     private String description;
 
+    @Nationalized
     @Column(name = "Brand", length = 100)
     private String brand;
 
@@ -78,7 +84,8 @@ public class Product {
     private LocalDateTime updatedAt;
 
     @Version
-    @Column(name = "RowVersion", columnDefinition = "rowversion")
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
+    @Column(name = "RowVersion", columnDefinition = "rowversion", insertable = false, updatable = false)
     private byte[] rowVersion;
 
     @OneToMany(mappedBy = "product")

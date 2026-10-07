@@ -59,18 +59,16 @@ export const useCartStore = create(
 
       // 3. Cập nhật số lượng sản phẩm
       updateQuantity: (productId, quantity) => {
-        if (quantity <= 0) {
-          get().removeFromCart(productId);
-          return;
-        }
+        // Giảm số lượng không xóa mặt hàng; việc xóa có nút riêng.
+        const requestedQuantity = Math.max(1, Number(quantity) || 1);
 
         set((state) => ({
           items: state.items.map((item) => {
             if (item.id === productId) {
-              const maxStock = item.stockQuantity ?? 999;
+              const maxStock = Math.max(1, item.stockQuantity ?? 999);
               return {
                 ...item,
-                quantity: Math.min(quantity, maxStock),
+                quantity: Math.min(requestedQuantity, maxStock),
               };
             }
             return item;

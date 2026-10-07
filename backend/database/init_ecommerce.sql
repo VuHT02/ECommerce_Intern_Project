@@ -274,7 +274,7 @@ INSERT INTO dbo.Products (CategoryId, SKU, Name, Slug, Description, Brand, Price
 -- 1. Điện thoại Apple
 (2, 'IPHONE-15-PM-256', N'iPhone 15 Pro Max 256GB Titan Tự Nhiên', 'iphone-15-pro-max-256gb-titan',
  N'Chip Apple A17 Pro mạnh mẽ, khung viền Titan siêu bền nhẹ, hệ thống camera tiềm vọng zoom 5x đỉnh cao.',
- N'Apple', 29490000.00, 45, N'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80', 1),
+ N'Apple', 29490000.00, 45, N'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=800&q=80', 1),
 
 -- 2. Điện thoại Samsung
 (2, 'SS-S24-ULTRA-256', N'Samsung Galaxy S24 Ultra 5G 256GB Xám Titan', 'samsung-galaxy-s24-ultra-5g-256gb',
@@ -284,7 +284,7 @@ INSERT INTO dbo.Products (CategoryId, SKU, Name, Slug, Description, Brand, Price
 -- 3. Điện thoại Xiaomi
 (2, 'XIAOMI-14-512', N'Xiaomi 14 Ultra 512GB Đen Nhiếp Ảnh Leica', 'xiaomi-14-ultra-512gb-den',
  N'Hệ thống 4 camera cảm biến 1 inch hợp tác Leica, chip Snapdragon 8 Gen 3, màn hình WQHD+ AMOLED siêu sáng.',
- N'Xiaomi', 24490000.00, 20, N'https://images.unsplash.com/photo-1598327105666-5b89351aff97?auto=format&fit=crop&w=800&q=80', 1),
+ N'Xiaomi', 24490000.00, 20, N'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80', 1),
 
 -- 4. Máy tính MacBook
 (3, 'MACBOOK-PRO-M3-14', N'MacBook Pro 14 inch M3 Pro (18GB RAM / 512GB SSD)', 'macbook-pro-14-m3-pro-18gb-512gb',
@@ -325,7 +325,7 @@ GO
 -- 4.5. Thêm Bộ sưu tập nhiều ảnh chi tiết (ProductImages)
 INSERT INTO dbo.ProductImages (ProductId, ImageUrl, DisplayOrder, IsThumbnail) VALUES
 -- Ảnh iPhone 15 Pro Max
-(1, N'https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80', 1, 1),
+(1, N'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=800&q=80', 1, 1),
 (1, N'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?auto=format&fit=crop&w=800&q=80', 2, 0),
 (1, N'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?auto=format&fit=crop&w=800&q=80', 3, 0),
 
