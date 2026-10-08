@@ -10,19 +10,17 @@ import {
   Truck,
   RotateCcw,
   Cpu,
-  Layers,
-  Monitor,
-  HardDrive,
   AlertCircle,
   PackageX,
   ArrowLeft,
   Sparkles,
   Laptop,
-  CheckCircle2
+  CheckCircle2,
 } from 'lucide-react';
 import { useProductDetail } from '../hooks/useProducts';
 import { useCartStore } from '../store/cartStore';
 import { formatCurrency } from '../utils/format';
+import { getProductSpecifications } from '../utils/productSpecifications';
 
 /**
  * Trang Chi tiết Sản phẩm (ProductDetailPage):
@@ -199,35 +197,8 @@ export default function ProductDetailPage() {
     );
   }
 
-  // 4. BẢNG THÔNG SỐ KỸ THUẬT (Mặc định cho Laptop / Smartphone công nghệ)
-  const isPhone = product.categoryName?.toLowerCase().includes('thoại') || product.name?.toLowerCase().includes('phone');
-  
-  const specifications = [
-    {
-      label: 'Vi xử lý (CPU)',
-      value: isPhone ? 'Apple A17 Pro / Snapdragon 8 Gen 3' : 'Intel Core i7 / Apple M3 Series',
-      icon: Cpu,
-      color: 'text-indigo-600 bg-indigo-50',
-    },
-    {
-      label: 'Bộ nhớ RAM',
-      value: isPhone ? '8 GB / 12 GB LPDDR5X' : '16 GB / 32 GB DDR5 5600MHz',
-      icon: Layers,
-      color: 'text-blue-600 bg-blue-50',
-    },
-    {
-      label: 'Màn hình hiển thị',
-      value: isPhone ? '6.7 inch Super Retina XDR OLED, 120Hz' : '15.6 inch Retina 2.8K, 120Hz DCI-P3 100%',
-      icon: Monitor,
-      color: 'text-cyan-600 bg-cyan-50',
-    },
-    {
-      label: 'Ổ cứng / Lưu trữ',
-      value: '512 GB PCIe 4.0 NVMe SSD tốc độ cao',
-      icon: HardDrive,
-      color: 'text-emerald-600 bg-emerald-50',
-    },
-  ];
+  // Chỉ dựng thông số lấy được từ chính dữ liệu sản phẩm; không tự gán cấu hình mẫu.
+  const specifications = getProductSpecifications(product);
 
   return (
     <div className="min-h-screen bg-slate-50/50 py-8 px-4 sm:px-6 lg:px-8">
@@ -487,29 +458,35 @@ export default function ProductDetailPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {specifications.map((spec, index) => {
-              const Icon = spec.icon;
-              return (
-                <div
-                  key={index}
-                  className="p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-colors flex flex-col justify-between"
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className={`p-2.5 rounded-xl ${spec.color}`}>
-                      <Icon size={20} />
+          {specifications.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {specifications.map((spec) => {
+                const Icon = spec.icon;
+                return (
+                  <div
+                    key={spec.label}
+                    className="p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-colors flex flex-col justify-between"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className={`p-2.5 rounded-xl ${spec.color}`}>
+                        <Icon size={20} />
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        {spec.label}
+                      </span>
                     </div>
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                      {spec.label}
-                    </span>
+                    <p className="text-sm font-extrabold text-slate-900 leading-snug">
+                      {spec.value}
+                    </p>
                   </div>
-                  <p className="text-sm font-extrabold text-slate-900 leading-snug">
-                    {spec.value}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 text-sm text-slate-500">
+              Sản phẩm chưa có thông số kỹ thuật chi tiết trong dữ liệu.
+            </p>
+          )}
 
           {/* Chi tiết mô tả đầy đủ */}
           <div className="pt-6 border-t border-slate-100">
