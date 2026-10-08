@@ -20,6 +20,7 @@ import {
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { orderApi } from '../services/orderApi';
+import { paymentApi } from '../services/paymentApi';
 import { cartApi } from '../services/cartApi';
 import { formatCurrency } from '../utils/format';
 
@@ -82,9 +83,17 @@ export default function CheckoutPage() {
         paymentMethod: selectedPayment,
       };
 
-      const createdOrder = await orderApi.createOrder(orderPayload);
+      if (selectedPayment === 'VNPAY') {
+        const payment = await paymentApi.createVnPayCheckout(orderPayload);
+        if (!payment?.paymentUrl) {
+          throw new Error('Máy chủ chưa tạo được liên kết thanh toán VNPAY.');
+        }
+        // Keep the local cart until the signed VNPAY return confirms payment.
+        window.location.assign(payment.paymentUrl);
+        return;
+      }
 
-      // 3. Xóa giỏ hàng sau khi đặt thành công
+      const createdOrder = await orderApi.createOrder(orderPayload);
       clearCart();
 
       // 4. Hiển thị popup thông báo thành công qua react-toastify
@@ -102,7 +111,7 @@ export default function CheckoutPage() {
 
       // 5. Chuyển hướng về trang chủ sau khi popup hiển thị
       setTimeout(() => {
-        navigate('/');
+        navigate('/orders');
       }, 2000);
     } catch (err) {
       toast.error(
@@ -454,12 +463,12 @@ export default function CheckoutPage() {
                   {isSubmitting ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      <span>Đang xử lý đơn hàng...</span>
+                      <span>{selectedPayment === 'VNPAY' ? 'Đang chuyển đến VNPAY...' : 'Đang xử lý đơn hàng...'}</span>
                     </>
                   ) : (
                     <>
                       <CheckCircle2 size={18} />
-                      <span>Đặt hàng ngay ({formatCurrency(finalTotal)})</span>
+                      <span>{selectedPayment === 'VNPAY' ? 'Thanh toán qua VNPAY' : `Đặt hàng ngay (${formatCurrency(finalTotal)})`}</span>
                     </>
                   )}
                 </button>

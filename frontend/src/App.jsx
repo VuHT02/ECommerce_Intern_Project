@@ -9,6 +9,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProfilePage from './pages/ProfilePage';
+import PaymentResultPage from './pages/PaymentResultPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="products/:id" element={<ProductDetailPage />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
+          <Route path="payment/result" element={<PaymentResultPage />} />
 
           {/* Protected Routes (Yêu cầu đăng nhập, tự động chuyển hướng /login nếu chưa đăng nhập) */}
           <Route

@@ -2,6 +2,7 @@ package com.example.demo.service;
 
 import com.example.demo.dto.OrderResponse;
 import com.example.demo.dto.PaymentResponse;
+import com.example.demo.dto.CreateOrderRequest;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.Map;
@@ -12,6 +13,9 @@ public interface PaymentService {
      * Tạo URL chuyển hướng sang cổng thanh toán VNPAY Sandbox cho đơn hàng ở trạng thái PENDING.
      */
     PaymentResponse createPaymentUrl(Long orderId, HttpServletRequest request);
+
+    /** Creates a pending order and its VNPAY URL in one database transaction. */
+    PaymentResponse createVnPayCheckout(CreateOrderRequest orderRequest, HttpServletRequest request);
 
     /**
      * Xử lý IPN (Instant Payment Notification) Webhook gọi ngầm từ máy chủ VNPAY:

@@ -16,6 +16,12 @@ public class PaymentResponse {
 
     private String paymentUrl;
 
+    private Long orderId;
+
+    private String orderNumber;
+
+    private java.math.BigDecimal amount;
+
     @Builder.Default
     private String status = "OK";
 

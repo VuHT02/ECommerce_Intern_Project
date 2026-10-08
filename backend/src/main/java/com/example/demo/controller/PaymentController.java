@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.CreateOrderRequest;
 import com.example.demo.dto.OrderResponse;
 import com.example.demo.dto.PaymentResponse;
 import com.example.demo.service.PaymentService;
@@ -30,6 +31,14 @@ import java.util.Map;
 public class PaymentController {
 
     private final PaymentService paymentService;
+
+    @PostMapping("/checkout")
+    public ResponseEntity<ApiResponse<PaymentResponse>> createVnPayCheckout(
+            @org.springframework.web.bind.annotation.RequestBody CreateOrderRequest orderRequest,
+            HttpServletRequest request) {
+        PaymentResponse response = paymentService.createVnPayCheckout(orderRequest, request);
+        return ResponseEntity.ok(ApiResponse.success("Đã tạo đơn hàng, đang chuyển đến cổng thanh toán VNPAY.", response));
+    }
 
     /**
      * 1. API Tạo URL chuyển hướng sang cổng thanh toán VNPAY Sandbox.
@@ -75,10 +84,14 @@ public class PaymentController {
      * Endpoint: GET /api/v1/payments/vnpay-return
      * Nhận kết quả khi VNPAY redirect trình duyệt của người dùng về website sau khi thanh toán.
      */
-    @GetMapping("/vnpay-return")
+    @GetMapping({"/vnpay-return", "/vnpay_return"})
     public ResponseEntity<ApiResponse<OrderResponse>> vnpayReturnCallback(@RequestParam Map<String, String> allParams) {
-        log.info("[PaymentController] Nhận chuyển hướng Return URL từ khách hàng: TxnRef = {}", allParams.get("vnp_TxnRef"));
+        log.info("[VNPAY Return] Nhận callback: orderCode={}, responseCode={}, transactionStatus={}",
+                allParams.get("vnp_TxnRef"), allParams.get("vnp_ResponseCode"),
+                allParams.get("vnp_TransactionStatus"));
         OrderResponse response = paymentService.processPaymentReturn(allParams);
+        log.info("[VNPAY Return] Đã xử lý orderCode={}, orderStatus={}, paymentStatus={}",
+                response.getOrderNumber(), response.getStatus(), response.getPaymentStatus());
         return ResponseEntity.ok(ApiResponse.success("Xử lý kết quả giao dịch VNPAY thành công!", response));
     }
 }

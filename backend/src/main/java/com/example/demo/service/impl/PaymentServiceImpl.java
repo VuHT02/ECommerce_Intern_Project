@@ -4,6 +4,7 @@ import com.example.demo.config.VnPayConfig;
 import com.example.demo.dto.OrderItemResponse;
 import com.example.demo.dto.OrderResponse;
 import com.example.demo.dto.PaymentResponse;
+import com.example.demo.dto.CreateOrderRequest;
 import com.example.demo.entity.Order;
 import com.example.demo.entity.OrderItem;
 import com.example.demo.entity.Product;
@@ -12,6 +13,7 @@ import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.OrderRepository;
 import com.example.demo.repository.ProductRepository;
 import com.example.demo.service.PaymentService;
+import com.example.demo.service.OrderService;
 import com.example.demo.service.VoucherService;
 import com.example.demo.util.VNPayUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -50,6 +53,19 @@ public class PaymentServiceImpl implements PaymentService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final VoucherService voucherService;
+    private final OrderService orderService;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PaymentResponse createVnPayCheckout(CreateOrderRequest orderRequest, HttpServletRequest request) {
+        orderRequest.setPaymentMethod("VNPAY");
+        OrderResponse createdOrder = orderService.createOrderFromCart(orderRequest);
+        PaymentResponse payment = createPaymentUrl(createdOrder.getId(), request);
+        payment.setOrderId(createdOrder.getId());
+        payment.setOrderNumber(createdOrder.getOrderNumber());
+        payment.setAmount(createdOrder.getTotalAmount());
+        return payment;
+    }
 
     @Override
     @Transactional
@@ -67,11 +83,20 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // 2. Tính tổng tiền cần thanh toán (nhân 100 theo quy định không dấu thập phân của VNPAY)
-        long amount = order.getTotalAmount().multiply(BigDecimal.valueOf(100)).longValue();
+        long amount;
+        try {
+            amount = order.getTotalAmount().multiply(BigDecimal.valueOf(100)).longValueExact();
+        } catch (ArithmeticException exception) {
+            throw new BadRequestException("Số tiền đơn hàng không hợp lệ để thanh toán VNPAY.");
+        }
+        if (amount < 500_000L) {
+            throw new BadRequestException("Số tiền thanh toán tối thiểu qua VNPAY là 5.000 VND.");
+        }
 
         // 3. Thời gian tạo giao dịch và hạn thanh toán (+15 phút)
-        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("Etc/GMT+7"));
+        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
+        formatter.setTimeZone(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         String createDate = formatter.format(calendar.getTime());
 
         calendar.add(Calendar.MINUTE, 15);
@@ -105,10 +130,10 @@ public class PaymentServiceImpl implements PaymentService {
             String fieldName = itr.next();
             String fieldValue = vnpParams.get(fieldName);
             if (fieldValue != null && !fieldValue.isEmpty()) {
-                hashData.append(fieldName).append('=').append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
-                query.append(URLEncoder.encode(fieldName, StandardCharsets.US_ASCII))
+                hashData.append(fieldName).append('=').append(URLEncoder.encode(fieldValue, StandardCharsets.UTF_8));
+                query.append(URLEncoder.encode(fieldName, StandardCharsets.UTF_8))
                         .append('=')
-                        .append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
+                        .append(URLEncoder.encode(fieldValue, StandardCharsets.UTF_8));
                 if (itr.hasNext()) {
                     query.append('&');
                     hashData.append('&');
@@ -129,6 +154,9 @@ public class PaymentServiceImpl implements PaymentService {
 
         return PaymentResponse.builder()
                 .paymentUrl(paymentUrl)
+                .orderId(order.getId())
+                .orderNumber(order.getOrderNumber())
+                .amount(order.getTotalAmount())
                 .status("OK")
                 .message("Tạo URL chuyển hướng VNPAY thành công!")
                 .build();
@@ -147,7 +175,8 @@ public class PaymentServiceImpl implements PaymentService {
         fields.remove("vnp_SecureHashType");
 
         String calculatedHash = VNPayUtil.hashAllFields(fields, vnPayConfig.getVnp_HashSecret());
-        if (!calculatedHash.equalsIgnoreCase(vnpSecureHash)) {
+        if (!isValidSignature(calculatedHash, vnpSecureHash)
+                || !vnPayConfig.getVnp_TmnCode().equals(params.get("vnp_TmnCode"))) {
             log.error("[VNPAY IPN] Sai chữ ký số! Checksum không khớp.");
             response.put("RspCode", "97");
             response.put("Message", "Invalid Checksum");
@@ -165,12 +194,16 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         Order order = orderOpt.get();
+        if (!"VNPAY".equalsIgnoreCase(order.getPaymentMethod())) {
+            response.put("RspCode", "03");
+            response.put("Message", "Order does not use VNPAY");
+            return response;
+        }
 
         // 3. Kiểm tra số tiền giao dịch
-        long vnpAmount = Long.parseLong(params.get("vnp_Amount")) / 100;
-        long orderAmount = order.getTotalAmount().longValue();
-        if (vnpAmount != orderAmount) {
-            log.warn("[VNPAY IPN] Số tiền không khớp! VNPAY: {} đ, Đơn hàng: {} đ", vnpAmount, orderAmount);
+        if (!isAmountValid(params.get("vnp_Amount"), order)) {
+            log.warn("[VNPAY IPN] Số tiền không khớp! VNPAY: {}, đơn hàng: {} đ",
+                    params.get("vnp_Amount"), order.getTotalAmount());
             response.put("RspCode", "04");
             response.put("Message", "Invalid Amount");
             return response;
@@ -187,12 +220,12 @@ public class PaymentServiceImpl implements PaymentService {
 
         // 5. Kiểm tra mã phản hồi từ VNPAY
         String responseCode = params.get("vnp_ResponseCode");
-        if ("00".equals(responseCode)) {
+        if ("00".equals(responseCode) && "00".equals(params.get("vnp_TransactionStatus"))) {
             // Thanh toán thành công (mã 00) -> Cập nhật đơn thành PAID
             order.setPaymentStatus("PAID");
-            order.setStatus("PROCESSING");
+            order.setStatus("PAID");
             orderRepository.save(order);
-            log.info("[VNPAY IPN] Thanh toán THÀNH CÔNG cho đơn hàng #{}. Trạng thái -> PAID", orderNumber);
+            log.info("[VNPAY IPN] Đã lưu orderCode={} với orderStatus=PAID, paymentStatus=PAID", orderNumber);
         } else {
             // Thanh toán thất bại -> Cập nhật FAILED, đồng thời hoàn trả lại số lượng sản phẩm vào kho (Product.stockQuantity)
             order.setPaymentStatus("FAILED");
@@ -212,29 +245,60 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public OrderResponse processPaymentReturn(Map<String, String> params) {
+        String orderNumber = params.get("vnp_TxnRef");
+        log.info("[VNPAY Return] Bắt đầu xác minh orderCode={}, responseCode={}",
+                orderNumber, params.get("vnp_ResponseCode"));
+
         String vnpSecureHash = params.get("vnp_SecureHash");
         Map<String, String> fields = new HashMap<>(params);
         fields.remove("vnp_SecureHash");
         fields.remove("vnp_SecureHashType");
 
         String calculatedHash = VNPayUtil.hashAllFields(fields, vnPayConfig.getVnp_HashSecret());
-        if (!calculatedHash.equalsIgnoreCase(vnpSecureHash)) {
+        if (!isValidSignature(calculatedHash, vnpSecureHash)
+                || !vnPayConfig.getVnp_TmnCode().equals(params.get("vnp_TmnCode"))) {
+            log.warn("[VNPAY Return] Chữ ký hoặc mã cửa hàng không hợp lệ cho orderCode={}", orderNumber);
             throw new BadRequestException("Chữ ký bảo mật không hợp lệ!");
         }
+        log.info("[VNPAY Return] Chữ ký hợp lệ cho orderCode={}", orderNumber);
 
-        String orderNumber = params.get("vnp_TxnRef");
         Order order = orderRepository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + orderNumber));
+        log.info("[VNPAY Return] Đã tìm thấy đơn orderCode={}, currentStatus={}, currentPaymentStatus={}",
+                orderNumber, order.getStatus(), order.getPaymentStatus());
+
+        if (!"VNPAY".equalsIgnoreCase(order.getPaymentMethod())) {
+            throw new BadRequestException("Đơn hàng này không sử dụng phương thức VNPAY.");
+        }
+
+        if (!isAmountValid(params.get("vnp_Amount"), order)) {
+            log.warn("[VNPAY Return] Số tiền không khớp cho orderCode={}", orderNumber);
+            throw new BadRequestException("Số tiền thanh toán VNPAY không khớp với đơn hàng.");
+        }
+        log.info("[VNPAY Return] Số tiền hợp lệ cho orderCode={}", orderNumber);
 
         String responseCode = params.get("vnp_ResponseCode");
-        if ("00".equals(responseCode)) {
-            if (!"PAID".equalsIgnoreCase(order.getPaymentStatus())) {
+        boolean paymentSucceeded = "00".equals(responseCode);
+        if (paymentSucceeded) {
+            if ("CANCELLED".equalsIgnoreCase(order.getStatus())
+                    || "EXPIRED".equalsIgnoreCase(order.getPaymentStatus())) {
+                throw new BadRequestException("Đơn hàng đã hết hạn hoặc bị hủy, không thể xác nhận thanh toán.");
+            }
+            if (!"PAID".equalsIgnoreCase(order.getPaymentStatus())
+                    || !"PAID".equalsIgnoreCase(order.getStatus())) {
                 order.setPaymentStatus("PAID");
-                order.setStatus("PROCESSING");
+                order.setStatus("PAID");
                 orderRepository.save(order);
+                log.info("[VNPAY Return] Đã lưu DB orderCode={} với orderStatus=PAID, paymentStatus=PAID",
+                        orderNumber);
+            } else {
+                log.info("[VNPAY Return] orderCode={} đã PAID trước đó, không cập nhật lặp", orderNumber);
             }
         } else {
-            if (!"CANCELLED".equalsIgnoreCase(order.getStatus())) {
+            log.warn("[VNPAY Return] Giao dịch thất bại orderCode={}, responseCode={}, transactionStatus={}",
+                    orderNumber, responseCode, params.get("vnp_TransactionStatus"));
+            if (!"CANCELLED".equalsIgnoreCase(order.getStatus())
+                    && !"EXPIRED".equalsIgnoreCase(order.getPaymentStatus())) {
                 order.setPaymentStatus("FAILED");
                 order.setStatus("CANCELLED");
                 rollbackStockAndVoucher(order);
@@ -322,5 +386,24 @@ public class PaymentServiceImpl implements PaymentService {
                 .items(itemResponses)
                 .createdAt(order.getCreatedAt())
                 .build();
+    }
+
+    private boolean isValidSignature(String calculatedHash, String providedHash) {
+        return providedHash != null && !providedHash.isBlank()
+                && MessageDigest.isEqual(
+                        calculatedHash.toLowerCase().getBytes(StandardCharsets.US_ASCII),
+                        providedHash.toLowerCase().getBytes(StandardCharsets.US_ASCII));
+    }
+
+    private boolean isAmountValid(String amountParam, Order order) {
+        if (amountParam == null) return false;
+        try {
+            long vnpAmount = Long.parseLong(amountParam);
+            long expectedAmount = order.getTotalAmount()
+                    .multiply(BigDecimal.valueOf(100)).longValueExact();
+            return vnpAmount == expectedAmount;
+        } catch (NumberFormatException | ArithmeticException exception) {
+            return false;
+        }
     }
 }

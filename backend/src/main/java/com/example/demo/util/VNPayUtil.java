@@ -9,7 +9,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -100,24 +99,22 @@ public class VNPayUtil {
     }
 
     /**
-     * Tiện ích băm toàn bộ tham số URL theo bảng chữ cái US-ASCII chuẩn VNPAY 2.1.0.
+     * Băm các tham số đã sắp xếp theo tên; nội dung URL được mã hóa UTF-8.
      */
     public static String hashAllFields(Map<String, String> fields, String secretKey) {
         List<String> fieldNames = new ArrayList<>(fields.keySet());
         Collections.sort(fieldNames);
 
         StringBuilder sb = new StringBuilder();
-        Iterator<String> itr = fieldNames.iterator();
-        while (itr.hasNext()) {
-            String fieldName = itr.next();
+        boolean first = true;
+        for (String fieldName : fieldNames) {
             String fieldValue = fields.get(fieldName);
             if (fieldValue != null && !fieldValue.isEmpty()) {
+                if (!first) sb.append('&');
                 sb.append(fieldName);
                 sb.append("=");
-                sb.append(URLEncoder.encode(fieldValue, StandardCharsets.US_ASCII));
-                if (itr.hasNext()) {
-                    sb.append("&");
-                }
+                sb.append(URLEncoder.encode(fieldValue, StandardCharsets.UTF_8));
+                first = false;
             }
         }
         return hmacSHA512(secretKey, sb.toString());
