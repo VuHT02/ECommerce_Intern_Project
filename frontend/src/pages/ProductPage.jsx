@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -17,6 +17,7 @@ import ProductList from '../components/ProductList';
 import ProductFilterSidebar from '../components/ProductFilterSidebar';
 import { formatCurrency } from '../utils/format';
 import { repairVietnameseLabel } from '../utils/vietnameseText';
+import { getShopFilterCategories } from '../utils/categoryTabs';
 
 /**
  * Trang Danh Sách Sản Phẩm (ProductPage) đẳng cấp:
@@ -61,13 +62,12 @@ export default function ProductPage() {
     sortDir: apiSortDir,
   });
 
-  // Fetch danh mục phục vụ Tab phân loại (danh sách phẳng, ưu tiên danh mục con)
+  // Tab lọc: Laptop, Điện thoại, Máy tính bảng, Phụ kiện (không dùng nhánh laptop con)
   const { data: categoriesData } = useCategories();
-  const categories = useMemo(() => {
-    const all = Array.isArray(categoriesData) ? categoriesData : [];
-    const children = all.filter((cat) => cat.parentCategoryId);
-    return children.length > 0 ? children : all;
-  }, [categoriesData]);
+  const categories = useMemo(
+    () => getShopFilterCategories(categoriesData),
+    [categoriesData]
+  );
 
   // Trích xuất mảng sản phẩm từ Page Response của Spring Boot
   const rawProducts = useMemo(
@@ -117,6 +117,22 @@ export default function ProductPage() {
     setSearchParams(next, { replace: true });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  useEffect(() => {
+    if (categories.length === 0 || !categoryId) return;
+    const visible = categories.some((cat) => String(cat.id) === String(categoryId));
+    if (!visible) {
+      updateQueryParam('categoryId', '');
+    }
+  }, [categories, categoryId]);
+
+  useEffect(() => {
+    if (!data || isLoading) return;
+    const loadedPages = data.totalPages ?? 1;
+    if (page > 0 && page >= loadedPages) {
+      handlePageChange(0);
+    }
+  }, [data, isLoading, page]);
 
   // Xóa từng bộ lọc cụ thể (Filter Chips)
   const handleRemoveBrand = (brandToRemove) => {

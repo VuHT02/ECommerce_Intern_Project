@@ -40,6 +40,13 @@ public class CategoryController {
         );
     }
 
+    @GetMapping("/shop")
+    public ResponseEntity<ApiResponse<List<CategoryResponse>>> getShopFilterCategories() {
+        return ResponseEntity.ok(
+                ApiResponse.success("Lấy danh mục cửa hàng thành công", categoryService.getShopFilterCategories())
+        );
+    }
+
     @GetMapping("/{slug}")
     public ResponseEntity<ApiResponse<CategoryResponse>> getCategoryBySlug(@PathVariable String slug) {
         return ResponseEntity.ok(

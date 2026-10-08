@@ -10,5 +10,7 @@ public interface CategoryService {
 
     List<CategoryResponse> getAllActiveCategories();
 
+    List<CategoryResponse> getShopFilterCategories();
+
     CategoryResponse getCategoryBySlug(String slug);
 }

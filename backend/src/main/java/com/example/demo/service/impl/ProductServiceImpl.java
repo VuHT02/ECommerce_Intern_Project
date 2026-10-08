@@ -39,7 +39,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public Page<ProductResponse> getAllProducts(Pageable pageable) {
-        return productRepository.findAll(pageable).map(this::mapToResponse);
+        return productRepository.findAllActiveWithCategory(pageable).map(this::mapToResponse);
     }
 
     @Override

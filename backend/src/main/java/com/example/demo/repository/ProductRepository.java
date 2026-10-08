@@ -25,6 +25,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findByCategoryIdAndActiveTrue(Long categoryId);
 
+    @Query(
+            value = "SELECT p FROM Product p LEFT JOIN FETCH p.category c WHERE p.active = true",
+            countQuery = "SELECT COUNT(p) FROM Product p WHERE p.active = true")
+    Page<Product> findAllActiveWithCategory(Pageable pageable);
+
     // =========================================================================
     // CUSTOM QUERIES: Tìm kiếm sản phẩm điện tử theo tên và lọc theo khoảng giá
     // =========================================================================
@@ -52,8 +57,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
      */
     @Query("SELECT p FROM Product p " +
            "LEFT JOIN p.category c " +
+           "LEFT JOIN c.parentCategory parent " +
            "WHERE p.active = true " +
-           "AND (:categoryId IS NULL OR c.id = :categoryId OR c.parentCategory.id = :categoryId) " +
+           "AND (:categoryId IS NULL OR c.id = :categoryId OR parent.id = :categoryId) " +
            "AND (:categoryName = '' OR LOWER(c.name) LIKE LOWER(CONCAT('%', :categoryName, '%'))) " +
            "AND (:brand = '' OR LOWER(p.brand) LIKE LOWER(CONCAT('%', :brand, '%'))) " +
            "AND (:keyword = '' OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +

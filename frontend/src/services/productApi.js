@@ -55,8 +55,16 @@ export const productApi = {
     return res.data;
   },
 
-  // 4. Lấy danh sách phẳng danh mục (tab lọc trang sản phẩm)
+  // 4. Lấy danh mục lọc cửa hàng: Laptop, Điện thoại, Máy tính bảng, Phụ kiện
   getCategories: async () => {
+    try {
+      const shop = await apiClient('/categories/shop');
+      if (Array.isArray(shop.data) && shop.data.length > 0) {
+        return shop.data;
+      }
+    } catch {
+      // Fallback danh sách phẳng nếu backend chưa có /shop
+    }
     const res = await apiClient('/categories/all');
     return res.data;
   },

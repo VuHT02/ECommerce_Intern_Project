@@ -33,7 +33,8 @@ export const useCategories = () => {
   return useQuery({
     queryKey: ['categories'],
     queryFn: () => productApi.getCategories(),
-    staleTime: 1000 * 60 * 30, // Danh mục ít thay đổi -> Cache 30 phút
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 };
 

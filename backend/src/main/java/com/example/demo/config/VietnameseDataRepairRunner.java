@@ -28,8 +28,16 @@ public class VietnameseDataRepairRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         try {
             alterAllVarcharToNvarchar();
+            Long laptopId = ensureCategory("laptop", "Laptop", null, "may-tinh-laptop", "may-tinh");
+            Long phoneId = ensureCategory("dien-thoai", "\u0110i\u1ec7n tho\u1ea1i", null, "dien-thoai-thong-minh");
+            Long tabletId = ensureCategory("may-tinh-bang", "M\u00e1y t\u00ednh b\u1ea3ng", null);
+            Long accessoryId = ensureCategory("phu-kien", "Ph\u1ee5 ki\u1ec7n", null, "phu-kien-dien-tu");
+            nestUnder("laptop-van-phong", laptopId);
+            nestUnder("laptop-gaming", laptopId);
+            nestUnder("laptop-do-hoa", laptopId);
             repairCategoryNames();
             repairProductNames();
+            reassignProductsToShopCategories(laptopId, phoneId, tabletId, accessoryId);
             repairProductImages();
             log.info("Vietnamese data repair completed successfully.");
         } catch (Exception e) {
@@ -163,6 +171,83 @@ public class VietnameseDataRepairRunner implements ApplicationRunner {
         t += fixDeadImage("ProductImages", "ImageUrl", "photo-1695048133142", imgLaptop);
         t += fixDeadImage("ProductImages", "ImageUrl", "photo-1598327105666", imgLaptop);
         if (t > 0) log.info("Fixed {} dead image URLs.", t);
+    }
+
+    private void reassignProductsToShopCategories(Long laptopId, Long phoneId, Long tabletId, Long accessoryId) {
+        if (laptopId == null || phoneId == null || tabletId == null || accessoryId == null) {
+            return;
+        }
+        int moved = 0;
+        moved += jdbc.update(
+                "UPDATE Products SET CategoryId = ? WHERE IsActive = 1 AND ("
+                        + "SKU LIKE ? OR SKU LIKE ? OR LOWER(Slug) LIKE ? OR LOWER(Slug) LIKE ? OR LOWER(Name) LIKE ?)",
+                tabletId, "%IPAD%", "%TAB%", "%ipad%", "%tab-%", "%ipad%");
+        moved += jdbc.update(
+                "UPDATE Products SET CategoryId = ? WHERE IsActive = 1 AND CategoryId <> ? AND ("
+                        + "SKU LIKE ? OR SKU LIKE ? OR SKU LIKE ? OR SKU LIKE ? OR LOWER(Slug) LIKE ? OR LOWER(Name) LIKE ? OR LOWER(Name) LIKE ?)",
+                phoneId, tabletId, "%IPHONE%", "%S24%", "XIAOMI%", "%GALAXY-S%", "%iphone%", "%iphone%", "%xiaomi%");
+        moved += jdbc.update(
+                "UPDATE Products SET CategoryId = ? WHERE IsActive = 1 AND ("
+                        + "SKU LIKE ? OR SKU LIKE ? OR SKU LIKE ? OR SKU LIKE ? OR SKU LIKE ? OR LOWER(Slug) LIKE ? OR LOWER(Slug) LIKE ?)",
+                accessoryId, "%AIRPODS%", "%BUDS%", "LOGI%", "KEYCHRON%", "%CHUOT%", "%airpods%", "%buds%");
+        if (moved > 0) {
+            log.info("Reassigned {} products into shop categories.", moved);
+        }
+    }
+
+    private Long ensureCategory(String slug, String name, Long parentId, String... aliases) {
+        try {
+            Long existingId = findCategoryId(slug);
+            if (existingId == null) {
+                for (String alias : aliases) {
+                    existingId = findCategoryId(alias);
+                    if (existingId != null) {
+                        slug = alias;
+                        break;
+                    }
+                }
+            }
+            if (existingId == null) {
+                if (parentId == null) {
+                    jdbc.update(
+                            "INSERT INTO Categories (ParentCategoryId, Name, Slug, IsActive, CreatedAt) VALUES (NULL, N'"
+                                    + esc(name) + "', ?, 1, SYSUTCDATETIME())",
+                            slug);
+                } else {
+                    jdbc.update(
+                            "INSERT INTO Categories (ParentCategoryId, Name, Slug, IsActive, CreatedAt) VALUES (?, N'"
+                                    + esc(name) + "', ?, 1, SYSUTCDATETIME())",
+                            parentId, slug);
+                }
+            } else {
+                jdbc.update(
+                        "UPDATE Categories SET Name = N'" + esc(name) + "', IsActive = 1 WHERE CategoryId = ?",
+                        existingId);
+            }
+            return findCategoryId(slug);
+        } catch (Exception e) {
+            log.warn("ensureCategory {} failed: {}", slug, e.getMessage());
+            return null;
+        }
+    }
+
+    private Long findCategoryId(String slug) {
+        try {
+            return jdbc.queryForObject("SELECT CategoryId FROM Categories WHERE Slug = ?", Long.class, slug);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void nestUnder(String slug, Long parentId) {
+        if (parentId == null) {
+            return;
+        }
+        try {
+            jdbc.update("UPDATE Categories SET ParentCategoryId = ?, IsActive = 1 WHERE Slug = ?", parentId, slug);
+        } catch (Exception e) {
+            log.debug("nestUnder {} failed: {}", slug, e.getMessage());
+        }
     }
 
     // ================================================================
