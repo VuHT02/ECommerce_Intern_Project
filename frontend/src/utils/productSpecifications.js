@@ -28,6 +28,18 @@ const formatCapacity = (value, unit) => `${value} ${unit.toUpperCase()}`;
 export function getProductSpecifications(product) {
   if (!product) return [];
 
+  const savedSpecifications = product.specifications && typeof product.specifications === 'object'
+    ? Object.entries(product.specifications).filter(([label, value]) => label?.trim() && value?.toString().trim())
+    : [];
+  if (savedSpecifications.length > 0) {
+    return savedSpecifications.map(([label, value]) => ({
+      label,
+      value: String(value),
+      icon: Layers,
+      color: 'text-blue-600 bg-blue-50',
+    }));
+  }
+
   const name = product.name || '';
   const description = product.description || '';
   const source = `${name} ${description}`;

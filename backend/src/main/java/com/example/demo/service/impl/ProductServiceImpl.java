@@ -12,17 +12,23 @@ import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.ProductImageRepository;
 import com.example.demo.repository.ProductRepository;
 import com.example.demo.service.ProductService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 @Service
@@ -32,6 +38,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductImageRepository productImageRepository;
+    private final ObjectMapper objectMapper;
 
     private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
@@ -40,6 +47,29 @@ public class ProductServiceImpl implements ProductService {
     @Transactional(readOnly = true)
     public Page<ProductResponse> getAllProducts(Pageable pageable) {
         return productRepository.findAllActiveWithCategory(pageable).map(this::mapToResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> getAdminProducts(String keyword, Long categoryId, Boolean active, Boolean lowStock, Pageable pageable) {
+        Specification<Product> specification = (root, query, cb) -> cb.conjunction();
+        if (keyword != null && !keyword.isBlank()) {
+            String term = "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
+            specification = specification.and((root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("name")), term),
+                    cb.like(cb.lower(root.get("sku")), term),
+                    cb.like(cb.lower(root.get("brand")), term)));
+        }
+        if (categoryId != null) {
+            specification = specification.and((root, query, cb) -> cb.equal(root.get("category").get("id"), categoryId));
+        }
+        if (active != null) {
+            specification = specification.and((root, query, cb) -> cb.equal(root.get("active"), active));
+        }
+        if (Boolean.TRUE.equals(lowStock)) {
+            specification = specification.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("stockQuantity"), 5));
+        }
+        return productRepository.findAll(specification, pageable).map(this::mapToResponse);
     }
 
     @Override
@@ -98,21 +128,13 @@ public class ProductServiceImpl implements ProductService {
         product.setStockQuantity(request.getStockQuantity());
         product.setImageUrl(request.getImageUrl());
         product.setActive(request.isActive());
+        product.setSpecificationsJson(serializeSpecifications(request.getSpecifications()));
 
         Product savedProduct = productRepository.save(product);
 
         // Lưu thư viện ảnh chi tiết (nếu có)
         if (request.getDetailImageUrls() != null && !request.getDetailImageUrls().isEmpty()) {
-            List<ProductImage> images = new ArrayList<>();
-            int order = 1;
-            for (String imgUrl : request.getDetailImageUrls()) {
-                ProductImage img = new ProductImage();
-                img.setProduct(savedProduct);
-                img.setImageUrl(imgUrl);
-                img.setDisplayOrder(order++);
-                img.setThumbnail(false);
-                images.add(img);
-            }
+            List<ProductImage> images = buildDetailImages(savedProduct, request.getDetailImageUrls());
             productImageRepository.saveAll(images);
             savedProduct.setImages(images);
         }
@@ -142,6 +164,20 @@ public class ProductServiceImpl implements ProductService {
         product.setStockQuantity(request.getStockQuantity());
         product.setImageUrl(request.getImageUrl());
         product.setActive(request.isActive());
+        product.setSpecificationsJson(serializeSpecifications(request.getSpecifications()));
+        String requestedSlug = (request.getSlug() != null && !request.getSlug().isBlank())
+                ? toSlug(request.getSlug()) : toSlug(request.getName());
+        if (!product.getSlug().equals(requestedSlug) && productRepository.existsBySlug(requestedSlug)) {
+            requestedSlug = requestedSlug + "-" + product.getId();
+        }
+        product.setSlug(requestedSlug);
+
+        if (request.getDetailImageUrls() != null) {
+            product.getImages().clear();
+            if (!request.getDetailImageUrls().isEmpty()) {
+                product.getImages().addAll(buildDetailImages(product, request.getDetailImageUrls()));
+            }
+        }
 
         Product updatedProduct = productRepository.save(product);
         return mapToResponse(updatedProduct);
@@ -190,11 +226,52 @@ public class ProductServiceImpl implements ProductService {
                 .price(product.getPrice())
                 .stockQuantity(product.getStockQuantity())
                 .imageUrl(product.getImageUrl())
+                .specifications(deserializeSpecifications(product.getSpecificationsJson()))
                 .active(product.isActive())
                 .detailImageUrls(detailImages)
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
                 .build();
+    }
+
+    private List<ProductImage> buildDetailImages(Product product, List<String> imageUrls) {
+        List<ProductImage> images = new ArrayList<>();
+        int order = 1;
+        for (String imageUrl : imageUrls) {
+            if (imageUrl == null || imageUrl.isBlank()) continue;
+            ProductImage image = new ProductImage();
+            image.setProduct(product);
+            image.setImageUrl(imageUrl.trim());
+            image.setDisplayOrder(order++);
+            image.setThumbnail(false);
+            images.add(image);
+        }
+        return images;
+    }
+
+    private String serializeSpecifications(Map<String, String> specifications) {
+        if (specifications == null || specifications.isEmpty()) return null;
+        Map<String, String> cleaned = new LinkedHashMap<>();
+        specifications.forEach((key, value) -> {
+            if (key != null && !key.isBlank() && value != null && !value.isBlank()) {
+                cleaned.put(key.trim(), value.trim());
+            }
+        });
+        if (cleaned.isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(cleaned);
+        } catch (JsonProcessingException exception) {
+            throw new BadRequestException("Không thể lưu thông số kỹ thuật sản phẩm.");
+        }
+    }
+
+    private Map<String, String> deserializeSpecifications(String json) {
+        if (json == null || json.isBlank()) return Map.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException exception) {
+            return Map.of();
+        }
     }
 
     private String toSlug(String input) {

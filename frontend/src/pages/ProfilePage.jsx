@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -22,9 +22,14 @@ import {
   Sparkles,
   ArrowRight,
   RefreshCw,
+  Pencil,
+  Save,
+  LoaderCircle,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { useAuthStore } from '../store/authStore';
 import { orderApi } from '../services/orderApi';
+import { userApi } from '../services/userApi';
 import { formatCurrency, formatDate } from '../utils/format';
 
 /**
@@ -91,8 +96,34 @@ const renderStatusBadge = (status) => {
  * - Xem hóa đơn chi tiết từng đơn hàng thông qua Modal
  */
 export default function ProfilePage() {
-  const { user } = useAuthStore();
+  const { user, updateProfile } = useAuthStore();
+  const normalizedRole = (user?.role || '').toUpperCase().replace(/^ROLE_/, '');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [profile, setProfile] = useState({ fullName: user?.fullName || '', phone: '' });
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  useEffect(() => {
+    userApi.getMyProfile().then((data) => {
+      setProfile({ fullName: data.fullName || '', phone: data.phone || '' });
+    }).catch(() => {});
+  }, [user?.id]);
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    setSavingProfile(true);
+    try {
+      const updated = await userApi.updateMyProfile(profile);
+      updateProfile({ fullName: updated.fullName, phone: updated.phone });
+      setProfile({ fullName: updated.fullName || '', phone: updated.phone || '' });
+      setEditingProfile(false);
+      toast.success('Đã cập nhật thông tin cá nhân.');
+    } catch (err) {
+      toast.error(err.message || 'Không cập nhật được thông tin cá nhân.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   // Fetch lịch sử đơn hàng từ Backend qua TanStack Query
   const {
@@ -152,7 +183,7 @@ export default function ProfilePage() {
                   </h2>
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                     <Shield size={11} />
-                    {user?.role === 'ROLE_ADMIN' ? 'Quản trị viên' : 'Thành viên'}
+                    {normalizedRole === 'ADMIN' ? 'Quản trị viên' : normalizedRole === 'STAFF' ? 'Nhân viên' : 'Thành viên'}
                   </span>
                 </div>
 
@@ -190,6 +221,22 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+
+        <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex items-center justify-between gap-3">
+            <div><h3 className="font-extrabold text-slate-900">Thông tin cá nhân</h3><p className="mt-1 text-xs text-slate-500">Chỉ tài khoản đang đăng nhập mới xem và cập nhật được thông tin này.</p></div>
+            {!editingProfile && <button onClick={() => setEditingProfile(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:border-blue-300 hover:text-blue-700"><Pencil size={14} /> Chỉnh sửa</button>}
+          </div>
+          {editingProfile ? (
+            <form onSubmit={saveProfile} className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="text-xs font-bold text-slate-600">Họ và tên<input required maxLength="150" value={profile.fullName} onChange={(e) => setProfile({ ...profile, fullName: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
+              <label className="text-xs font-bold text-slate-600">Số điện thoại<input maxLength="20" value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /></label>
+              <div className="flex justify-end gap-2 sm:col-span-2"><button type="button" onClick={() => { setEditingProfile(false); setProfile({ fullName: user?.fullName || '', phone: profile.phone }); }} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Hủy</button><button disabled={savingProfile} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{savingProfile ? <LoaderCircle size={15} className="animate-spin" /> : <Save size={15} />} Lưu thông tin</button></div>
+            </form>
+          ) : (
+            <div className="mt-5 grid gap-4 sm:grid-cols-2"><div><p className="text-xs text-slate-500">Họ và tên</p><p className="mt-1 font-semibold text-slate-800">{profile.fullName || 'Chưa cập nhật'}</p></div><div><p className="text-xs text-slate-500">Số điện thoại</p><p className="mt-1 font-semibold text-slate-800">{profile.phone || 'Chưa cập nhật'}</p></div></div>
+          )}
+        </section>
 
         {/* 2. BẢNG (TABLE) LIỆT KÊ CÁC ĐƠN HÀNG USER ĐÃ ĐẶT */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden space-y-4">

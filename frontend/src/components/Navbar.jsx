@@ -10,6 +10,7 @@ import {
   Package,
   ChevronDown,
   Shield,
+  LayoutDashboard,
 } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
@@ -32,6 +33,7 @@ export default function Navbar() {
   };
 
   const avatarLetter = (user?.fullName || user?.email || 'U')[0].toUpperCase();
+  const role = String(user?.role || '').toUpperCase().replace(/^ROLE_/, '');
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
@@ -135,12 +137,21 @@ export default function Navbar() {
                     </div>
                     <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
                       <Shield size={10} />
-                      {user?.role === 'ROLE_ADMIN' ? 'Quản trị viên' : 'Thành viên'}
+                      {role === 'ADMIN' ? 'Quản trị viên' : role === 'STAFF' ? 'Nhân viên' : 'Thành viên'}
                     </span>
                   </div>
 
                   {/* Menu items */}
                   <div className="py-1">
+                    {(role === 'ADMIN' || role === 'STAFF') && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setIsDropdownOpen(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 transition-colors"
+                      >
+                        <LayoutDashboard size={16} /> Khu vực quản trị
+                      </Link>
+                    )}
                     <Link
                       to="/profile"
                       onClick={() => setIsDropdownOpen(false)}

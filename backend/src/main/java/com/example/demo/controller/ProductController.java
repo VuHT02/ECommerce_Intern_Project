@@ -4,6 +4,7 @@ import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.ProductRequest;
 import com.example.demo.dto.ProductResponse;
 import com.example.demo.service.ProductService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -142,7 +143,7 @@ public class ProductController {
      * Body: ProductRequest JSON
      */
     @PostMapping
-    public ResponseEntity<ApiResponse<ProductResponse>> createProduct(@RequestBody ProductRequest request) {
+    public ResponseEntity<ApiResponse<ProductResponse>> createProduct(@Valid @RequestBody ProductRequest request) {
         ProductResponse created = productService.createProduct(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Tạo sản phẩm mới thành công", created));
@@ -156,7 +157,7 @@ public class ProductController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductResponse>> updateProduct(
             @PathVariable Long id,
-            @RequestBody ProductRequest request) {
+            @Valid @RequestBody ProductRequest request) {
         return ResponseEntity.ok(
                 ApiResponse.success("Cập nhật sản phẩm thành công", productService.updateProduct(id, request))
         );

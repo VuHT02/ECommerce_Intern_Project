@@ -72,6 +72,10 @@ public class Product {
     @Column(name = "ImageUrl", length = 1000)
     private String imageUrl;
 
+    @Nationalized
+    @Column(name = "SpecificationsJson", columnDefinition = "nvarchar(max)")
+    private String specificationsJson;
+
     @Column(name = "IsActive", nullable = false)
     private boolean active = true;
 

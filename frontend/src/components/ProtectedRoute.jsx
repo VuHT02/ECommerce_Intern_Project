@@ -7,12 +7,18 @@ import { useAuthStore } from '../store/authStore';
  * - Nếu là khách vãng lai chưa đăng nhập: Tự động chuyển hướng sang /login,
  *   đồng thời lưu đường dẫn hiện tại vào `state.from` để hỗ trợ Smart Redirection sau khi đăng nhập.
  */
-export default function ProtectedRoute({ children }) {
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+const normalizeRole = (role = '') => role.toUpperCase().replace(/^ROLE_/, '');
+
+export default function ProtectedRoute({ children, allowedRoles }) {
+  const { isLoggedIn, user } = useAuthStore();
   const location = useLocation();
 
   if (!isLoggedIn) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (allowedRoles?.length && !allowedRoles.includes(normalizeRole(user?.role))) {
+    return <Navigate to="/" replace />;
   }
 
   return children;

@@ -11,12 +11,37 @@ import RegisterPage from './pages/RegisterPage';
 import ProfilePage from './pages/ProfilePage';
 import PaymentResultPage from './pages/PaymentResultPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminLayout from './components/AdminLayout';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import AdminProductsPage from './pages/admin/AdminProductsPage';
+import AdminOrdersPage from './pages/admin/AdminOrdersPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
 
 export default function App() {
   return (
     <Router>
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} />
       <Routes>
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<AdminDashboardPage />} />
+          <Route path="products" element={<AdminProductsPage />} />
+          <Route path="orders" element={<AdminOrdersPage />} />
+          <Route
+            path="users"
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <AdminUsersPage />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
         <Route path="/" element={<Layout />}>
           {/* Public Routes */}
           <Route index element={<HomePage />} />

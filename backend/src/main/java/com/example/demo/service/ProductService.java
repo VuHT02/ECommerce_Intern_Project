@@ -11,6 +11,8 @@ public interface ProductService {
 
     Page<ProductResponse> getAllProducts(Pageable pageable);
 
+    Page<ProductResponse> getAdminProducts(String keyword, Long categoryId, Boolean active, Boolean lowStock, Pageable pageable);
+
     ProductResponse getProductById(Long id);
 
     ProductResponse getProductBySlug(String slug);

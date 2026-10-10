@@ -79,6 +79,10 @@ public class SecurityConfig {
                     "/api/v1/payments/vnpay-ipn", "/api/v1/payments/vnpay-return", "/api/v1/payments/vnpay_return"
                 ).permitAll()
 
+                // Endpoints quản trị: tài khoản chỉ ADMIN; dashboard, sản phẩm và đơn hàng cho ADMIN/STAFF.
+                .requestMatchers("/api/admin/users/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "STAFF")
+
                 // GET Xem sản phẩm, danh mục, voucher khả dụng: Công khai cho khách vãng lai
                 .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
@@ -94,7 +98,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.DELETE, "/api/categories/**").hasAnyRole("ADMIN")
 
                 // Cập nhật trạng thái đơn hàng (Duyệt/Giao): Yêu cầu ADMIN hoặc STAFF
-                .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasAnyRole("ADMIN", "STAFF")
+                .requestMatchers(HttpMethod.PATCH, "/api/orders/*/status").hasAnyRole("ADMIN", "STAFF")
+                .requestMatchers(HttpMethod.PATCH, "/api/admin/orders/*/status").hasAnyRole("ADMIN", "STAFF")
 
                 // Giỏ hàng và đặt hàng: Bắt buộc đã đăng nhập (bất kể Role)
                 .requestMatchers("/api/cart/**").authenticated()

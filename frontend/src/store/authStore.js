@@ -49,6 +49,10 @@ export const useAuthStore = create(
         set({ token: newAccessToken });
       },
 
+      updateProfile: (profile) => set((state) => ({
+        user: state.user ? { ...state.user, ...profile } : state.user,
+      })),
+
       // Đăng xuất tài khoản
       logout: () => {
         localStorage.removeItem('access_token');

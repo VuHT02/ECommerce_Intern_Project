@@ -4,6 +4,7 @@ import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.CreateOrderRequest;
 import com.example.demo.dto.OrderResponse;
 import com.example.demo.service.OrderService;
+import com.example.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -20,6 +21,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 
 /**
  * OrderController - Quản lý đơn đặt hàng
@@ -37,6 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrderController {
 
     private final OrderService orderService;
+    private final UserRepository userRepository;
 
     /**
      * POST /api/orders
@@ -49,7 +54,10 @@ public class OrderController {
      * Body: CreateOrderRequest JSON
      */
     @PostMapping
-    public ResponseEntity<ApiResponse<OrderResponse>> createOrder(@RequestBody CreateOrderRequest request) {
+    public ResponseEntity<ApiResponse<OrderResponse>> createOrder(
+            @RequestBody CreateOrderRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        request.setUserId(currentUserId(principal));
         OrderResponse order = orderService.createOrderFromCart(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Đặt hàng thành công! Cảm ơn bạn đã mua sắm.", order));
@@ -60,9 +68,12 @@ public class OrderController {
      * Chi tiết đơn hàng theo ID (dành cho Admin xem bất kỳ đơn nào)
      */
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<OrderResponse>> getOrderById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<OrderResponse>> getOrderById(
+            @PathVariable Long id, @AuthenticationPrincipal UserDetails principal) {
+        OrderResponse order = orderService.getOrderById(id);
+        requireOwnerOrAdmin(order.getUserId(), principal);
         return ResponseEntity.ok(
-                ApiResponse.success(orderService.getOrderById(id))
+                ApiResponse.success(order)
         );
     }
 
@@ -72,9 +83,12 @@ public class OrderController {
      * Dùng cho khách hàng tra cứu trạng thái đơn hàng
      */
     @GetMapping("/number/{orderNumber}")
-    public ResponseEntity<ApiResponse<OrderResponse>> getOrderByNumber(@PathVariable String orderNumber) {
+    public ResponseEntity<ApiResponse<OrderResponse>> getOrderByNumber(
+            @PathVariable String orderNumber, @AuthenticationPrincipal UserDetails principal) {
+        OrderResponse order = orderService.getOrderByOrderNumber(orderNumber);
+        requireOwnerOrAdmin(order.getUserId(), principal);
         return ResponseEntity.ok(
-                ApiResponse.success(orderService.getOrderByOrderNumber(orderNumber))
+                ApiResponse.success(order)
         );
     }
 
@@ -87,7 +101,9 @@ public class OrderController {
     public ResponseEntity<ApiResponse<Page<OrderResponse>>> getOrdersByUser(
             @PathVariable Long userId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @AuthenticationPrincipal UserDetails principal) {
+        requireOwnerOrAdmin(userId, principal);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         return ResponseEntity.ok(
@@ -104,7 +120,12 @@ public class OrderController {
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<OrderResponse>> updateOrderStatus(
             @PathVariable Long id,
-            @RequestParam String newStatus) {
+            @RequestParam String newStatus,
+            @AuthenticationPrincipal UserDetails principal) {
+        if (principal.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ROLE_ADMIN")
+                || a.getAuthority().equals("ROLE_STAFF"))) {
+            throw new AccessDeniedException("Bạn không có quyền cập nhật trạng thái đơn hàng.");
+        }
         return ResponseEntity.ok(
                 ApiResponse.success("Cập nhật trạng thái đơn hàng thành công",
                         orderService.updateOrderStatus(id, newStatus))
@@ -121,9 +142,28 @@ public class OrderController {
     @DeleteMapping("/{id}/cancel")
     public ResponseEntity<ApiResponse<OrderResponse>> cancelOrder(
             @PathVariable Long id,
-            @RequestParam Long userId) {
+            @RequestParam(required = false) Long userId,
+            @AuthenticationPrincipal UserDetails principal) {
+        Long authenticatedUserId = currentUserId(principal);
+        if (userId != null && !userId.equals(authenticatedUserId)) {
+            throw new AccessDeniedException("Không được truyền mã người dùng khác để hủy đơn.");
+        }
         return ResponseEntity.ok(
-                ApiResponse.success("Đơn hàng đã được hủy thành công", orderService.cancelOrder(id, userId))
+                ApiResponse.success("Đơn hàng đã được hủy thành công", orderService.cancelOrder(id, authenticatedUserId))
         );
+    }
+
+    private Long currentUserId(UserDetails principal) {
+        return userRepository.findByEmail(principal.getUsername())
+                .orElseThrow(() -> new AccessDeniedException("Tài khoản đăng nhập không tồn tại."))
+                .getId();
+    }
+
+    private void requireOwnerOrAdmin(Long ownerId, UserDetails principal) {
+        boolean administrator = principal.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        if (!administrator && !ownerId.equals(currentUserId(principal))) {
+            throw new AccessDeniedException("Bạn không có quyền truy cập đơn hàng của tài khoản khác.");
+        }
     }
 }
