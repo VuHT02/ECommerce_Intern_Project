@@ -17,6 +17,9 @@ public interface AuthService {
      */
     TokenResponse login(LoginRequest request);
 
+    /** Verify a Google ID token and create or sign in the corresponding local account. */
+    TokenResponse loginWithGoogle(String credential);
+
     /**
      * Xác thực Refresh Token và cấp Access Token mới mà không bắt người dùng đăng nhập lại.
      */

@@ -21,7 +21,6 @@ import { useCartStore } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { orderApi } from '../services/orderApi';
 import { paymentApi } from '../services/paymentApi';
-import { cartApi } from '../services/cartApi';
 import { formatCurrency } from '../utils/format';
 
 /**
@@ -34,7 +33,17 @@ import { formatCurrency } from '../utils/format';
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { items, getTotalPrice, clearCart } = useCartStore();
+  const {
+    items,
+    ownerUserId,
+    isReady: cartIsReady,
+    isLoading: cartIsLoading,
+    loadError: cartLoadError,
+    getTotalPrice,
+    clearCart,
+  } = useCartStore();
+  const cartBelongsToCurrentUser = user?.id != null
+    && String(ownerUserId) === String(user.id);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState('COD');
@@ -60,6 +69,11 @@ export default function CheckoutPage() {
 
   // Xử lý gửi đơn hàng (Gọi API POST lên Spring Boot)
   const onSubmit = async (formData) => {
+    if (!cartBelongsToCurrentUser || !cartIsReady) {
+      toast.error('Giỏ hàng chưa được đồng bộ với tài khoản. Vui lòng tải lại trang giỏ hàng.');
+      return;
+    }
+
     if (items.length === 0) {
       toast.warning('Giỏ hàng của bạn đang trống! Vui lòng chọn sản phẩm trước.');
       return;
@@ -68,12 +82,8 @@ export default function CheckoutPage() {
     try {
       setIsSubmitting(true);
 
-      // 1. Đồng bộ sản phẩm từ local Zustand lên DB giỏ hàng của user
-      if (user?.id) {
-        await cartApi.syncCartBeforeCheckout(user.id, items);
-      }
-
-      // 2. Gửi request tạo đơn hàng
+      // Giỏ hàng đã được lưu trên server theo tài khoản sau từng thao tác.
+      // Không xóa và chép lại giỏ tại đây vì có thể ghi đè dữ liệu giỏ của user.
       const orderPayload = {
         userId: user?.id,
         recipientName: formData.recipientName.trim(),
@@ -94,7 +104,7 @@ export default function CheckoutPage() {
       }
 
       const createdOrder = await orderApi.createOrder(orderPayload);
-      clearCart();
+      await clearCart();
 
       // 4. Hiển thị popup thông báo thành công qua react-toastify
       toast.success(
@@ -121,6 +131,29 @@ export default function CheckoutPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (!cartBelongsToCurrentUser || !cartIsReady) {
+    return (
+      <div className="min-h-[65vh] flex items-center justify-center px-4 py-12 bg-slate-50/50">
+        <div className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-xl">
+          {cartLoadError ? (
+            <>
+              <h2 className="text-xl font-extrabold text-slate-900">Không thể tải giỏ hàng</h2>
+              <p className="mt-3 text-sm text-slate-500">{cartLoadError}</p>
+              <Link to="/cart" className="mt-6 inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700">
+                Mở giỏ hàng để thử lại
+              </Link>
+            </>
+          ) : (
+            <div className="flex items-center justify-center gap-3 text-sm font-semibold text-slate-600" role="status">
+              <Loader2 className="animate-spin text-blue-600" size={22} />
+              {cartIsLoading ? 'Đang tải giỏ hàng của tài khoản...' : 'Đang đồng bộ giỏ hàng...'}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Nếu giỏ hàng trống, hướng dẫn quay lại
   if (items.length === 0) {

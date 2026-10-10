@@ -5,6 +5,8 @@ import com.example.demo.dto.CreateOrderRequest;
 import com.example.demo.dto.OrderResponse;
 import com.example.demo.dto.PaymentResponse;
 import com.example.demo.service.PaymentService;
+import com.example.demo.service.OrderService;
+import com.example.demo.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Map;
 
@@ -31,11 +36,15 @@ import java.util.Map;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final OrderService orderService;
+    private final UserRepository userRepository;
 
     @PostMapping("/checkout")
     public ResponseEntity<ApiResponse<PaymentResponse>> createVnPayCheckout(
             @org.springframework.web.bind.annotation.RequestBody CreateOrderRequest orderRequest,
-            HttpServletRequest request) {
+            HttpServletRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        orderRequest.setUserId(currentUserId(principal));
         PaymentResponse response = paymentService.createVnPayCheckout(orderRequest, request);
         return ResponseEntity.ok(ApiResponse.success("Đã tạo đơn hàng, đang chuyển đến cổng thanh toán VNPAY.", response));
     }
@@ -47,8 +56,10 @@ public class PaymentController {
     @GetMapping("/create-vnpay")
     public ResponseEntity<ApiResponse<PaymentResponse>> createPaymentUrlGet(
             @RequestParam Long orderId,
-            HttpServletRequest request) {
+            HttpServletRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
 
+        requireOrderOwner(orderId, principal);
         log.info("[PaymentController] Nhận yêu cầu tạo URL thanh toán VNPAY cho đơn hàng ID: {}", orderId);
         PaymentResponse response = paymentService.createPaymentUrl(orderId, request);
         return ResponseEntity.ok(ApiResponse.success("Tạo URL thanh toán VNPAY thành công!", response));
@@ -60,8 +71,10 @@ public class PaymentController {
     @PostMapping("/create-vnpay/{orderId}")
     public ResponseEntity<ApiResponse<PaymentResponse>> createPaymentUrlPost(
             @PathVariable Long orderId,
-            HttpServletRequest request) {
+            HttpServletRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
 
+        requireOrderOwner(orderId, principal);
         PaymentResponse response = paymentService.createPaymentUrl(orderId, request);
         return ResponseEntity.ok(ApiResponse.success("Tạo URL thanh toán VNPAY thành công!", response));
     }
@@ -93,5 +106,20 @@ public class PaymentController {
         log.info("[VNPAY Return] Đã xử lý orderCode={}, orderStatus={}, paymentStatus={}",
                 response.getOrderNumber(), response.getStatus(), response.getPaymentStatus());
         return ResponseEntity.ok(ApiResponse.success("Xử lý kết quả giao dịch VNPAY thành công!", response));
+    }
+
+    private Long currentUserId(UserDetails principal) {
+        return userRepository.findByEmail(principal.getUsername())
+                .orElseThrow(() -> new AccessDeniedException("Tài khoản đăng nhập không tồn tại."))
+                .getId();
+    }
+
+    private void requireOrderOwner(Long orderId, UserDetails principal) {
+        OrderResponse order = orderService.getOrderById(orderId);
+        boolean admin = principal.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        if (!admin && !order.getUserId().equals(currentUserId(principal))) {
+            throw new AccessDeniedException("Bạn không có quyền tạo thanh toán cho đơn hàng này.");
+        }
     }
 }

@@ -3,12 +3,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, LoaderCircle, RotateCw, ShieldCheck } from 'lucide-react';
 import { paymentApi } from '../services/paymentApi';
 import { useCartStore } from '../store/cartStore';
+import { useAuthStore } from '../store/authStore';
 import { formatCurrency } from '../utils/format';
 
 export default function PaymentResultPage() {
   const [searchParams] = useSearchParams();
   const [state, setState] = useState({ status: 'loading', order: null, message: '' });
-  const clearCart = useCartStore((store) => store.clearCart);
+  const refreshUserCart = useCartStore((store) => store.refreshUserCart);
+  const userId = useAuthStore((store) => store.user?.id);
   const queryString = searchParams.toString();
 
   useEffect(() => {
@@ -26,7 +28,9 @@ export default function PaymentResultPage() {
         if (!active) return;
 
         if (order?.paymentStatus === 'PAID') {
-          clearCart();
+          // The backend removes the purchased quantities after verifying payment.
+          // Reload so items added in another tab during payment remain visible.
+          if (userId != null) await refreshUserCart(userId).catch(() => {});
           setState({ status: 'success', order, message: '' });
         } else {
           setState({
@@ -47,7 +51,7 @@ export default function PaymentResultPage() {
 
     verifyPayment();
     return () => { active = false; };
-  }, [queryString, searchParams, clearCart]);
+  }, [queryString, searchParams, refreshUserCart, userId]);
 
   const isSuccess = state.status === 'success';
   const isLoading = state.status === 'loading';

@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.LoginRequest;
+import com.example.demo.dto.GoogleLoginRequest;
 import com.example.demo.dto.RefreshTokenRequest;
 import com.example.demo.dto.RegisterRequest;
 import com.example.demo.dto.TokenResponse;
@@ -51,6 +52,14 @@ public class AuthController {
         log.info("[AuthController] Nhận yêu cầu đăng nhập cho email: {}", request.getEmail());
         TokenResponse response = authService.login(request);
         return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công!", response));
+    }
+
+    /** Sign in with a Google Identity Services credential (Google ID token). */
+    @PostMapping("/google")
+    public ResponseEntity<ApiResponse<TokenResponse>> loginWithGoogle(
+            @Valid @RequestBody GoogleLoginRequest request) {
+        TokenResponse response = authService.loginWithGoogle(request.getCredential());
+        return ResponseEntity.ok(ApiResponse.success("ÄÄƒng nháº­p báº±ng Google thÃ nh cÃ´ng!", response));
     }
 
     /**

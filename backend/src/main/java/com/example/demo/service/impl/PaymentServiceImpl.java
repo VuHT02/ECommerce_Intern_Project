@@ -5,11 +5,15 @@ import com.example.demo.dto.OrderItemResponse;
 import com.example.demo.dto.OrderResponse;
 import com.example.demo.dto.PaymentResponse;
 import com.example.demo.dto.CreateOrderRequest;
+import com.example.demo.entity.Cart;
+import com.example.demo.entity.CartItem;
 import com.example.demo.entity.Order;
 import com.example.demo.entity.OrderItem;
 import com.example.demo.entity.Product;
 import com.example.demo.exception.BadRequestException;
 import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.repository.CartItemRepository;
+import com.example.demo.repository.CartRepository;
 import com.example.demo.repository.OrderRepository;
 import com.example.demo.repository.ProductRepository;
 import com.example.demo.service.PaymentService;
@@ -51,6 +55,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final VnPayConfig vnPayConfig;
     private final OrderRepository orderRepository;
+    private final CartRepository cartRepository;
+    private final CartItemRepository cartItemRepository;
     private final ProductRepository productRepository;
     private final VoucherService voucherService;
     private final OrderService orderService;
@@ -225,6 +231,7 @@ public class PaymentServiceImpl implements PaymentService {
             order.setPaymentStatus("PAID");
             order.setStatus("PAID");
             orderRepository.save(order);
+            removePurchasedQuantitiesFromCart(order);
             log.info("[VNPAY IPN] Đã lưu orderCode={} với orderStatus=PAID, paymentStatus=PAID", orderNumber);
         } else {
             // Thanh toán thất bại -> Cập nhật FAILED, đồng thời hoàn trả lại số lượng sản phẩm vào kho (Product.stockQuantity)
@@ -289,6 +296,7 @@ public class PaymentServiceImpl implements PaymentService {
                 order.setPaymentStatus("PAID");
                 order.setStatus("PAID");
                 orderRepository.save(order);
+                removePurchasedQuantitiesFromCart(order);
                 log.info("[VNPAY Return] Đã lưu DB orderCode={} với orderStatus=PAID, paymentStatus=PAID",
                         orderNumber);
             } else {
@@ -307,6 +315,27 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         return mapToOrderResponse(order);
+    }
+
+    /** Remove only quantities purchased by this order, preserving any later cart additions. */
+    private void removePurchasedQuantitiesFromCart(Order order) {
+        Cart cart = cartRepository.findByUserId(order.getUser().getId()).orElse(null);
+        if (cart == null || order.getItems() == null) return;
+
+        for (OrderItem orderedItem : order.getItems()) {
+            CartItem cartItem = cartItemRepository
+                    .findByCartIdAndProductId(cart.getId(), orderedItem.getProduct().getId())
+                    .orElse(null);
+            if (cartItem == null) continue;
+
+            int remainingQuantity = cartItem.getQuantity() - orderedItem.getQuantity();
+            if (remainingQuantity <= 0) {
+                cartItemRepository.delete(cartItem);
+            } else {
+                cartItem.setQuantity(remainingQuantity);
+                cartItemRepository.save(cartItem);
+            }
+        }
     }
 
     @Override

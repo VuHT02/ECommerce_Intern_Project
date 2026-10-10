@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, CheckCircle2, Laptop, ShoppingBag, XCircle } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { Check, CheckCircle2, Laptop, LoaderCircle, ShoppingBag, XCircle } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { getFallbackProductImage, getProductImageUrl } from '../utils/productImage';
 import { repairVietnameseLabel } from '../utils/vietnameseText';
@@ -14,6 +15,7 @@ const formatVnd = (price) =>
 
 export default function ProductCard({ product }) {
   const [added, setAdded] = useState(false);
+  const [adding, setAdding] = useState(false);
   const imageKey = JSON.stringify([
     product.id,
     product.imageUrl,
@@ -104,12 +106,18 @@ export default function ProductCard({ product }) {
         lineHeight: 1,
       };
 
-  const handleAddToCart = () => {
-    if (isOutOfStock) return;
-
-    addToCart(product, 1);
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1600);
+  const handleAddToCart = async () => {
+    if (isOutOfStock || adding) return;
+    setAdding(true);
+    try {
+      await addToCart(product, 1);
+      setAdded(true);
+      setTimeout(() => setAdded(false), 1600);
+    } catch (error) {
+      toast.error(error?.message || 'Không thể thêm sản phẩm vào giỏ hàng.');
+    } finally {
+      setAdding(false);
+    }
   };
 
   const handleImageError = () => {
@@ -194,18 +202,20 @@ export default function ProductCard({ product }) {
           <button
             type="button"
             onClick={handleAddToCart}
-            disabled={isOutOfStock}
+            disabled={isOutOfStock || adding}
             className={`mt-3 flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors ${
               isOutOfStock
                 ? 'cursor-not-allowed bg-gray-200 text-gray-400'
-                : added
+                : adding
+                  ? 'bg-blue-500 text-white cursor-wait'
+                  : added
                   ? 'bg-green-600 text-white hover:bg-green-700'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
             }`}
             title={isOutOfStock ? 'Sản phẩm đã hết hàng' : 'Thêm sản phẩm vào giỏ hàng'}
           >
-            {added ? <Check size={16} /> : <ShoppingBag size={16} />}
-            <span>{added ? 'Đã thêm vào giỏ' : 'Thêm vào giỏ'}</span>
+            {adding ? <LoaderCircle className="animate-spin" size={16} /> : added ? <Check size={16} /> : <ShoppingBag size={16} />}
+            <span>{adding ? 'Đang thêm...' : added ? 'Đã thêm vào giỏ' : 'Thêm vào giỏ'}</span>
           </button>
         </div>
       </div>

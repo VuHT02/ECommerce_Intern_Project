@@ -148,8 +148,12 @@ public class OrderServiceImpl implements OrderService {
             voucherService.markVoucherUsed(appliedVoucher.getId());
         }
 
-        // 10. Xóa sạch giỏ hàng của user sau khi đặt hàng thành công
-        cartItemRepository.deleteByCartId(cart.getId());
+        // Keep VNPAY items in the user's cart while payment is pending. A failed
+        // payment can then be retried; successful VNPAY processing removes only
+        // the quantities captured by this order. COD orders consume the cart now.
+        if (!"VNPAY".equalsIgnoreCase(order.getPaymentMethod())) {
+            cartItemRepository.deleteByCartId(cart.getId());
+        }
 
         return mapToOrderResponse(savedOrder);
     }
@@ -181,7 +185,38 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse updateOrderStatus(Long orderId, String newStatus) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + orderId));
-        order.setStatus(newStatus.toUpperCase());
+        String next = newStatus == null ? "" : newStatus.trim().toUpperCase();
+        String current = order.getStatus().toUpperCase();
+        boolean validTransition = switch (current) {
+            case "PENDING" -> "CONFIRMED".equals(next) || "CANCELLED".equals(next);
+            case "CONFIRMED" -> "PROCESSING".equals(next) || "CANCELLED".equals(next);
+            case "PAID" -> "PROCESSING".equals(next);
+            case "PROCESSING" -> "SHIPPING".equals(next);
+            case "SHIPPING" -> "DELIVERED".equals(next);
+            default -> false;
+        };
+        if (!validTransition) {
+            throw new BadRequestException("Không thể chuyển đơn hàng từ " + current + " sang " + next + ".");
+        }
+
+        if ("CANCELLED".equals(next)) {
+            if ("PAID".equalsIgnoreCase(order.getPaymentStatus())) {
+                throw new BadRequestException("Đơn đã thanh toán. Cần xử lý hoàn tiền riêng trước khi hủy.");
+            }
+            for (OrderItem item : order.getItems()) {
+                Product product = item.getProduct();
+                product.setStockQuantity(product.getStockQuantity() + item.getQuantity());
+                productRepository.save(product);
+            }
+            if (order.getVoucher() != null) {
+                voucherService.refundVoucherUsage(order.getVoucher().getId());
+            }
+            if ("VNPAY".equalsIgnoreCase(order.getPaymentMethod())) {
+                order.setPaymentStatus("CANCELLED");
+            }
+        }
+
+        order.setStatus(next);
         return mapToOrderResponse(orderRepository.save(order));
     }
 

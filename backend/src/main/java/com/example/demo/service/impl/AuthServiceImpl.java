@@ -11,6 +11,7 @@ import com.example.demo.repository.RefreshTokenRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.security.JwtTokenProvider;
 import com.example.demo.service.AuthService;
+import com.example.demo.service.GoogleCredentialVerifier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -21,6 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Triển khai nghiệp vụ Xác thực và Quản lý phiên JWT:
@@ -38,6 +41,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
+    private final GoogleCredentialVerifier googleCredentialVerifier;
 
     @Override
     @Transactional
@@ -91,6 +95,39 @@ public class AuthServiceImpl implements AuthService {
         log.info("[Auth] Người dùng {} đăng nhập thành công. Đang cấp phát token...", user.getEmail());
 
         // 3. Sinh cặp token và lưu Refresh Token vào DB
+        return generateAuthTokens(user);
+    }
+
+    @Override
+    @Transactional
+    public TokenResponse loginWithGoogle(String credential) {
+        var payload = googleCredentialVerifier.verify(credential);
+        String email = payload.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        User user = userRepository.findByEmail(email).orElseGet(() -> {
+            Object nameClaim = payload.get("name");
+            String fullName = nameClaim instanceof String name && !name.isBlank()
+                    ? name.trim()
+                    : email.substring(0, email.indexOf('@'));
+            if (fullName.length() > 150) {
+                fullName = fullName.substring(0, 150);
+            }
+
+            User newUser = new User();
+            newUser.setEmail(email);
+            newUser.setFullName(fullName);
+            // Google accounts authenticate with Google; this random hash cannot be used as a known password.
+            newUser.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+            newUser.setRole("CUSTOMER");
+            newUser.setActive(true);
+            return userRepository.save(newUser);
+        });
+
+        if (!user.isActive()) {
+            throw new BadRequestException("TÃ i khoáº£n cá»§a báº¡n hiá»‡n Ä‘ang bá»‹ khÃ³a. Vui lÃ²ng liÃªn há»‡ quáº£n trá»‹ viÃªn!");
+        }
+
+        log.info("[Auth] Google sign-in successful for {}", email);
         return generateAuthTokens(user);
     }
 

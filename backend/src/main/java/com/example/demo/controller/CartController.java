@@ -3,6 +3,7 @@ package com.example.demo.controller;
 import com.example.demo.dto.AddToCartRequest;
 import com.example.demo.dto.ApiResponse;
 import com.example.demo.dto.CartResponse;
+import com.example.demo.repository.UserRepository;
 import com.example.demo.service.CartService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 
 /**
  * CartController - Quản lý giỏ hàng người dùng
@@ -31,13 +35,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class CartController {
 
     private final CartService cartService;
+    private final UserRepository userRepository;
 
     /**
      * GET /api/cart/{userId}
      * Lấy toàn bộ giỏ hàng kèm thông tin sản phẩm và tổng tiền tạm tính
      */
     @GetMapping("/{userId}")
-    public ResponseEntity<ApiResponse<CartResponse>> getCart(@PathVariable Long userId) {
+    public ResponseEntity<ApiResponse<CartResponse>> getCart(@PathVariable Long userId,
+                                                               @AuthenticationPrincipal UserDetails principal) {
+        requireOwner(userId, principal);
         return ResponseEntity.ok(
                 ApiResponse.success("Lấy giỏ hàng thành công", cartService.getCartByUserId(userId))
         );
@@ -51,7 +58,9 @@ public class CartController {
     @PostMapping("/{userId}/items")
     public ResponseEntity<ApiResponse<CartResponse>> addToCart(
             @PathVariable Long userId,
-            @RequestBody AddToCartRequest request) {
+            @RequestBody AddToCartRequest request,
+            @AuthenticationPrincipal UserDetails principal) {
+        requireOwner(userId, principal);
         return ResponseEntity.ok(
                 ApiResponse.success("Đã thêm sản phẩm vào giỏ hàng", cartService.addToCart(userId, request))
         );
@@ -65,7 +74,9 @@ public class CartController {
     public ResponseEntity<ApiResponse<CartResponse>> updateItemQuantity(
             @PathVariable Long userId,
             @PathVariable Long cartItemId,
-            @RequestParam int quantity) {
+            @RequestParam int quantity,
+            @AuthenticationPrincipal UserDetails principal) {
+        requireOwner(userId, principal);
         return ResponseEntity.ok(
                 ApiResponse.success("Cập nhật giỏ hàng thành công",
                         cartService.updateItemQuantity(userId, cartItemId, quantity))
@@ -79,7 +90,9 @@ public class CartController {
     @DeleteMapping("/{userId}/items/{cartItemId}")
     public ResponseEntity<ApiResponse<CartResponse>> removeItem(
             @PathVariable Long userId,
-            @PathVariable Long cartItemId) {
+            @PathVariable Long cartItemId,
+            @AuthenticationPrincipal UserDetails principal) {
+        requireOwner(userId, principal);
         return ResponseEntity.ok(
                 ApiResponse.success("Đã xóa sản phẩm khỏi giỏ hàng", cartService.removeItem(userId, cartItemId))
         );
@@ -90,10 +103,21 @@ public class CartController {
      * Xóa sạch toàn bộ giỏ hàng (dùng sau khi đặt hàng xong hoặc khi user muốn làm lại)
      */
     @DeleteMapping("/{userId}")
-    public ResponseEntity<ApiResponse<Void>> clearCart(@PathVariable Long userId) {
+    public ResponseEntity<ApiResponse<Void>> clearCart(@PathVariable Long userId,
+                                                        @AuthenticationPrincipal UserDetails principal) {
+        requireOwner(userId, principal);
         cartService.clearCart(userId);
         return ResponseEntity.ok(
                 ApiResponse.success("Đã xóa toàn bộ giỏ hàng", null)
         );
+    }
+
+    private void requireOwner(Long requestedUserId, UserDetails principal) {
+        Long authenticatedUserId = userRepository.findByEmail(principal.getUsername())
+                .orElseThrow(() -> new AccessDeniedException("Tài khoản đăng nhập không tồn tại."))
+                .getId();
+        if (!authenticatedUserId.equals(requestedUserId)) {
+            throw new AccessDeniedException("Bạn không có quyền truy cập giỏ hàng của tài khoản khác.");
+        }
     }
 }

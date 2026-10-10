@@ -10,8 +10,13 @@ import {
   Truck,
   RotateCcw,
   Laptop,
+  LoaderCircle,
+  RotateCw,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { useCartStore } from '../store/cartStore';
+import { useAuthStore } from '../store/authStore';
+import { cartApi } from '../services/cartApi';
 import { formatCurrency } from '../utils/format';
 
 /**
@@ -22,14 +27,67 @@ import { formatCurrency } from '../utils/format';
  * - Hiển thị Empty Cart State sinh động khi giỏ hàng trống
  */
 export default function CartPage() {
+  const user = useAuthStore((state) => state.user);
   const {
     items,
+    ownerUserId,
+    isReady,
+    isLoading,
+    loadError,
+    beginUserSession,
+    setUserCart,
+    failUserCartLoad,
     updateQuantity,
     removeFromCart,
     clearCart,
     getTotalPrice,
     getTotalItems,
   } = useCartStore();
+
+  const cartBelongsToCurrentUser = user?.id != null
+    && String(ownerUserId) === String(user.id);
+  const cartIsReady = cartBelongsToCurrentUser && isReady;
+
+  const retryCartLoad = async () => {
+    if (!user?.id) return;
+    beginUserSession(user.id);
+    try {
+      setUserCart(user.id, await cartApi.getCart(user.id));
+    } catch (error) {
+      failUserCartLoad(user.id, error);
+    }
+  };
+
+  const runCartAction = async (action) => {
+    try {
+      await action();
+    } catch (error) {
+      toast.error(error?.message || 'Không thể cập nhật giỏ hàng. Vui lòng thử lại.');
+    }
+  };
+
+  if (!cartIsReady) {
+    return (
+      <div className="min-h-[65vh] flex items-center justify-center px-4 py-12 bg-slate-50/50">
+        <div className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-xl">
+          {loadError ? (
+            <>
+              <h1 className="text-xl font-extrabold text-slate-900">Không thể tải giỏ hàng</h1>
+              <p className="mt-3 text-sm text-slate-500">{loadError}</p>
+              <button type="button" onClick={retryCartLoad} className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700">
+                <RotateCw size={16} /> Thử tải lại
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center justify-center gap-3 text-sm font-semibold text-slate-600" role="status">
+              <LoaderCircle className="animate-spin text-blue-600" size={22} />
+              {isLoading ? 'Đang tải giỏ hàng của tài khoản...' : 'Đang đồng bộ giỏ hàng...'}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const totalItems = getTotalItems();
   const subtotal = getTotalPrice();
@@ -92,7 +150,7 @@ export default function CartPage() {
 
           <button
             type="button"
-            onClick={clearCart}
+            onClick={() => runCartAction(clearCart)}
             className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 py-2 rounded-xl transition-colors self-start sm:self-auto"
             title="Xóa tất cả mặt hàng khỏi giỏ"
           >
@@ -176,7 +234,7 @@ export default function CartPage() {
                       <div className="inline-flex items-center border border-slate-200 rounded-xl bg-slate-50 overflow-hidden">
                         <button
                           type="button"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => runCartAction(() => updateQuantity(item.id, item.quantity - 1))}
                           disabled={item.quantity <= 1}
                           className="p-2 text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           title="Giảm số lượng"
@@ -188,7 +246,7 @@ export default function CartPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          onClick={() => runCartAction(() => updateQuantity(item.id, item.quantity + 1))}
                           disabled={item.quantity >= maxStock}
                           className="p-2 text-slate-600 hover:bg-slate-200 disabled:opacity-40 transition-colors"
                           title="Tăng số lượng"
@@ -207,7 +265,7 @@ export default function CartPage() {
                       {/* Nút xóa mặt hàng */}
                       <button
                         type="button"
-                        onClick={() => removeFromCart(item.id)}
+                        onClick={() => runCartAction(() => removeFromCart(item.id))}
                         className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
                         title="Xóa mặt hàng này"
                       >

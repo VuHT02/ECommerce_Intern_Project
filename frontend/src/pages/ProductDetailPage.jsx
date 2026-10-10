@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import {
   ShoppingBag,
   ShoppingCart,
@@ -16,6 +17,7 @@ import {
   Sparkles,
   Laptop,
   CheckCircle2,
+  LoaderCircle,
 } from 'lucide-react';
 import { useProductDetail } from '../hooks/useProducts';
 import { useCartStore } from '../store/cartStore';
@@ -40,6 +42,7 @@ export default function ProductDetailPage() {
   const [selectedImage, setSelectedImage] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [addedToast, setAddedToast] = useState(false);
+  const [isCartActionPending, setIsCartActionPending] = useState(false);
 
   // Cập nhật ảnh chính khi dữ liệu sản phẩm tải xong
   useEffect(() => {
@@ -71,20 +74,33 @@ export default function ProductDetailPage() {
   };
 
   // Thêm vào giỏ hàng
-  const handleAddToCart = (e) => {
+  const handleAddToCart = async (e) => {
     e?.preventDefault();
-    if (isOutOfStock || !product) return;
-
-    addToCart(product, quantity);
-    setAddedToast(true);
-    setTimeout(() => setAddedToast(false), 2500);
+    if (isOutOfStock || !product || isCartActionPending) return;
+    setIsCartActionPending(true);
+    try {
+      await addToCart(product, quantity);
+      setAddedToast(true);
+      setTimeout(() => setAddedToast(false), 2500);
+    } catch (error) {
+      toast.error(error?.message || 'Không thể thêm sản phẩm vào giỏ hàng.');
+    } finally {
+      setIsCartActionPending(false);
+    }
   };
 
   // Mua ngay (thêm vào giỏ và chuyển đến trang giỏ hàng)
-  const handleBuyNow = () => {
-    if (isOutOfStock || !product) return;
-    addToCart(product, quantity);
-    navigate('/cart');
+  const handleBuyNow = async () => {
+    if (isOutOfStock || !product || isCartActionPending) return;
+    setIsCartActionPending(true);
+    try {
+      await addToCart(product, quantity);
+      navigate('/cart');
+    } catch (error) {
+      toast.error(error?.message || 'Không thể thêm sản phẩm vào giỏ hàng.');
+    } finally {
+      setIsCartActionPending(false);
+    }
   };
 
   // 1. GIAO DIỆN SKELETON LOADING KHI ĐANG TẢI DỮ LIỆU
@@ -390,16 +406,23 @@ export default function ProductDetailPage() {
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  disabled={isOutOfStock}
+                  disabled={isOutOfStock || isCartActionPending}
                   className={`flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl text-sm font-bold transition-all duration-200 border ${
                     isOutOfStock
                       ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                      : isCartActionPending
+                      ? 'bg-blue-500 text-white border-blue-500 cursor-wait'
                       : addedToast
                       ? 'bg-emerald-600 text-white border-emerald-600'
                       : 'bg-white hover:bg-blue-50 text-blue-600 border-blue-600 hover:border-blue-700 shadow-sm'
                   }`}
                 >
-                  {addedToast ? (
+                  {isCartActionPending ? (
+                    <>
+                      <LoaderCircle className="animate-spin" size={18} />
+                      <span>Đang cập nhật...</span>
+                    </>
+                  ) : addedToast ? (
                     <>
                       <Check size={18} strokeWidth={2.5} />
                       <span>Đã thêm</span>
@@ -415,7 +438,7 @@ export default function ProductDetailPage() {
                 <button
                   type="button"
                   onClick={handleBuyNow}
-                  disabled={isOutOfStock}
+                  disabled={isOutOfStock || isCartActionPending}
                   className={`flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl text-sm font-bold transition-all duration-200 ${
                     isOutOfStock
                       ? 'bg-slate-200 text-slate-400 cursor-not-allowed'

@@ -91,6 +91,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
+    @ExceptionHandler(GoogleVerificationUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleGoogleVerificationUnavailable(
+            GoogleVerificationUnavailableException ex, HttpServletRequest request) {
+        log.error("[503 Google Verification Unavailable] Path: {} - Message: {}", request.getRequestURI(), ex.getMessage());
+        ErrorResponse response = ErrorResponse.of(
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
+                HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+    }
+
     /**
      * 5. Bắt lỗi Validate dữ liệu đầu vào (MethodArgumentNotValidException do @Valid sinh ra)
      * Trả về HTTP 400 BAD_REQUEST kèm danh sách chi tiết các field bị lỗi (ví dụ: 'Mật khẩu phải trên 8 ký tự')

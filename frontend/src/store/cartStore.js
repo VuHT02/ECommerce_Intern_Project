@@ -1,101 +1,171 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { cartApi } from '../services/cartApi';
 
-/**
- * Zustand Store quản lý Giỏ hàng toàn cục:
- * - addToCart: Thêm sản phẩm vào giỏ hoặc tăng số lượng nếu đã có
- * - removeFromCart: Xóa sản phẩm khỏi giỏ
- * - updateQuantity: Cập nhật số lượng mặt hàng
- * - clearCart: Xóa sạch toàn bộ giỏ hàng
- * - Middleware persist: Tự động lưu giỏ hàng vào localStorage (tránh mất dữ liệu khi F5)
- */
+const mapServerCart = (cart) => (cart?.items || []).map((item) => ({
+  id: item.productId,
+  cartItemId: item.id,
+  name: item.productName,
+  sku: item.productSku,
+  imageUrl: item.productImageUrl,
+  price: Number(item.unitPrice) || 0,
+  quantity: item.quantity,
+}));
+
+const saveServerCart = (userId, cart) => {
+  const state = useCartStore.getState();
+  if (String(state.ownerUserId) !== String(userId)) return;
+  useCartStore.setState({
+    items: mapServerCart(cart),
+    isReady: true,
+    isLoading: false,
+    loadError: null,
+  });
+};
+
 export const useCartStore = create(
   persist(
     (set, get) => ({
       items: [],
+      ownerUserId: null,
+      isReady: false,
+      isLoading: false,
+      loadError: null,
 
-      // 1. Thêm sản phẩm vào giỏ
-      addToCart: (product, quantity = 1) => {
+      beginUserSession: (userId) => set({
+        // Drop any previous account or guest cart before requesting this user's cart.
+        items: [],
+        ownerUserId: userId,
+        isReady: false,
+        isLoading: true,
+        loadError: null,
+      }),
+
+      setUserCart: saveServerCart,
+
+      refreshUserCart: async (userId) => {
+        try {
+          const cart = await cartApi.getCart(userId);
+          saveServerCart(userId, cart);
+          return cart;
+        } catch (error) {
+          get().failUserCartLoad(userId, error);
+          throw error;
+        }
+      },
+
+      failUserCartLoad: (userId, error) => {
+        if (String(get().ownerUserId) !== String(userId)) return;
+        set({
+          items: [],
+          isReady: false,
+          isLoading: false,
+          loadError: error?.message || 'Không thể tải giỏ hàng từ máy chủ.',
+        });
+      },
+
+      endUserSession: () => set({
+        items: [],
+        ownerUserId: null,
+        isReady: true,
+        isLoading: false,
+        loadError: null,
+      }),
+
+      addToCart: async (product, quantity = 1) => {
+        const { ownerUserId, isReady } = get();
+        if (ownerUserId != null) {
+          if (!isReady) throw new Error('Giỏ hàng đang được tải. Vui lòng thử lại sau ít giây.');
+          const cart = await cartApi.addItem(ownerUserId, product.id, quantity);
+          saveServerCart(ownerUserId, cart);
+          return;
+        }
+
         set((state) => {
-          const existingIndex = state.items.findIndex(
-            (item) => item.id === product.id
-          );
-
-          if (existingIndex > -1) {
-            // Đã tồn tại trong giỏ: Tăng số lượng
-            const updatedItems = [...state.items];
-            const currentItem = updatedItems[existingIndex];
-            const newQuantity = currentItem.quantity + quantity;
-
-            // Không vượt quá số lượng tồn kho (nếu có stockQuantity)
-            const maxStock = product.stockQuantity ?? 999;
-            updatedItems[existingIndex] = {
-              ...currentItem,
-              quantity: Math.min(newQuantity, maxStock),
+          const index = state.items.findIndex((item) => item.id === product.id);
+          if (index >= 0) {
+            const items = [...state.items];
+            const current = items[index];
+            const maxStock = Number(product.stockQuantity ?? current.stockQuantity ?? 999);
+            items[index] = {
+              ...current,
+              ...product,
+              quantity: Math.min(current.quantity + quantity, maxStock),
             };
-
-            return { items: updatedItems };
+            return { items };
           }
 
-          // Sản phẩm mới: Thêm vào mảng
           return {
-            items: [
-              ...state.items,
-              {
-                ...product,
-                quantity: Math.min(quantity, product.stockQuantity ?? 999),
-              },
-            ],
+            items: [...state.items, {
+              ...product,
+              quantity: Math.min(quantity, Number(product.stockQuantity ?? 999)),
+            }],
           };
         });
       },
 
-      // 2. Xóa sản phẩm khỏi giỏ hàng
-      removeFromCart: (productId) => {
-        set((state) => ({
-          items: state.items.filter((item) => item.id !== productId),
-        }));
+      removeFromCart: async (productId) => {
+        const { ownerUserId, isReady, items } = get();
+        if (ownerUserId != null) {
+          if (!isReady) throw new Error('Giỏ hàng đang được tải. Vui lòng thử lại sau ít giây.');
+          const item = items.find((cartItem) => String(cartItem.id) === String(productId));
+          if (!item?.cartItemId) return;
+          const cart = await cartApi.removeItem(ownerUserId, item.cartItemId);
+          saveServerCart(ownerUserId, cart);
+          return;
+        }
+        set((state) => ({ items: state.items.filter((item) => item.id !== productId) }));
       },
 
-      // 3. Cập nhật số lượng sản phẩm
-      updateQuantity: (productId, quantity) => {
-        // Giảm số lượng không xóa mặt hàng; việc xóa có nút riêng.
+      updateQuantity: async (productId, quantity) => {
         const requestedQuantity = Math.max(1, Number(quantity) || 1);
+        const { ownerUserId, isReady, items } = get();
+        if (ownerUserId != null) {
+          if (!isReady) throw new Error('Giỏ hàng đang được tải. Vui lòng thử lại sau ít giây.');
+          const item = items.find((cartItem) => String(cartItem.id) === String(productId));
+          if (!item?.cartItemId) return;
+          const cart = await cartApi.updateItem(ownerUserId, item.cartItemId, requestedQuantity);
+          saveServerCart(ownerUserId, cart);
+          return;
+        }
 
         set((state) => ({
           items: state.items.map((item) => {
-            if (item.id === productId) {
-              const maxStock = Math.max(1, item.stockQuantity ?? 999);
-              return {
-                ...item,
-                quantity: Math.min(requestedQuantity, maxStock),
-              };
-            }
-            return item;
+            if (String(item.id) !== String(productId)) return item;
+            const maxStock = Math.max(1, Number(item.stockQuantity ?? 999));
+            return { ...item, quantity: Math.min(requestedQuantity, maxStock) };
           }),
         }));
       },
 
-      // 4. Xóa sạch giỏ hàng
-      clearCart: () => {
+      clearCart: async () => {
+        const { ownerUserId, isReady } = get();
+        if (ownerUserId != null) {
+          if (!isReady) throw new Error('Giỏ hàng đang được tải. Vui lòng thử lại sau ít giây.');
+          await cartApi.clearCart(ownerUserId);
+        }
         set({ items: [] });
       },
 
-      // 5. Getter: Tổng số lượng sản phẩm trong giỏ
-      getTotalItems: () => {
-        return get().items.reduce((total, item) => total + item.quantity, 0);
-      },
-
-      // 6. Getter: Tổng giá trị tiền của giỏ hàng
-      getTotalPrice: () => {
-        return get().items.reduce(
-          (total, item) => total + Number(item.price) * item.quantity,
-          0
-        );
-      },
+      getTotalItems: () => get().items.reduce((total, item) => total + item.quantity, 0),
+      getTotalPrice: () => get().items.reduce(
+        (total, item) => total + Number(item.price) * item.quantity,
+        0,
+      ),
     }),
     {
-      name: 'ecommerce-cart-storage', // Khóa lưu trữ trong localStorage
-    }
-  )
+      name: 'ecommerce-cart-storage',
+      version: 2,
+      // Ignore data written by the old shared-cart format. A user cart is loaded
+      // from the server after authentication and guest items never follow a login.
+      migrate: () => ({
+        items: [],
+        ownerUserId: null,
+        isReady: false,
+        isLoading: false,
+        loadError: null,
+      }),
+      partialize: ({ items, ownerUserId }) => ({ items, ownerUserId }),
+    },
+  ),
 );

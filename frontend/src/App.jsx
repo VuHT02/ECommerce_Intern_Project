@@ -16,10 +16,12 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminProductsPage from './pages/admin/AdminProductsPage';
 import AdminOrdersPage from './pages/admin/AdminOrdersPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
+import CartSessionManager from './components/CartSessionManager';
 
 export default function App() {
   return (
     <Router>
+      <CartSessionManager />
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} />
       <Routes>
         <Route
