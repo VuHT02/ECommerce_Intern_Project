@@ -27,6 +27,7 @@ import com.example.demo.service.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -227,7 +228,7 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + orderId));
 
         if (!order.getUser().getId().equals(userId)) {
-            throw new BadRequestException("Bạn không có quyền hủy đơn hàng này!");
+            throw new AccessDeniedException("Bạn không có quyền hủy đơn hàng này.");
         }
 
         if (!"PENDING".equalsIgnoreCase(order.getStatus()) && !"CONFIRMED".equalsIgnoreCase(order.getStatus())) {
