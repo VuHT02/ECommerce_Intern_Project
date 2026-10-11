@@ -38,6 +38,23 @@ public class User {
     @Column(name = "PasswordHash", nullable = false, length = 255)
     private String passwordHash;
 
+    /** Primary sign-in method. Legacy null values are treated as LOCAL. */
+    @Column(name = "AuthProvider", length = 20)
+    private String authProvider = "LOCAL";
+
+    /** BCrypt hash of the reset code; the raw OTP is never persisted. */
+    @Column(name = "ResetPasswordOtp", length = 100)
+    private String resetPasswordOtp;
+
+    @Column(name = "OtpExpiryTime")
+    private LocalDateTime otpExpiryTime;
+
+    @Column(name = "ResetPasswordOtpAttempts")
+    private Integer resetPasswordOtpAttempts = 0;
+
+    @Column(name = "ResetPasswordOtpRequestedAt")
+    private LocalDateTime resetPasswordOtpRequestedAt;
+
     @Nationalized
     @Column(name = "FullName", length = 150)
     private String fullName;

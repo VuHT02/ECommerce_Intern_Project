@@ -24,4 +24,10 @@ public interface AuthService {
      * Xác thực Refresh Token và cấp Access Token mới mà không bắt người dùng đăng nhập lại.
      */
     TokenResponse refreshToken(RefreshTokenRequest request);
+
+    /** Tạo mã OTP có thời hạn cho tài khoản đăng nhập bằng email và mật khẩu. */
+    void forgotPassword(String email);
+
+    /** Xác minh OTP dùng một lần và cập nhật mật khẩu tài khoản LOCAL. */
+    void resetPassword(String email, String otp, String newPassword);
 }

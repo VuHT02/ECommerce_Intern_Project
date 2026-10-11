@@ -35,6 +35,22 @@ export const authApi = {
       body: JSON.stringify({ credential: googleCredentialToken }),
     });
   },
+
+  // 5. Yêu cầu mã OTP đặt lại mật khẩu
+  forgotPassword: async (email) => {
+    return await apiClient('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  // 6. Xác minh OTP và đặt mật khẩu mới
+  resetPassword: async ({ email, otp, newPassword }) => {
+    return await apiClient('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp, newPassword }),
+    });
+  },
 };
 
 export default authApi;

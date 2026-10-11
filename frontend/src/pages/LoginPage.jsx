@@ -31,6 +31,7 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm();
 
@@ -181,6 +182,9 @@ export default function LoginPage() {
                 <label className="form-label mb-0">Mật khẩu</label>
                 <button
                   type="button"
+                  onClick={() => navigate('/forgot-password', {
+                    state: { email: watch('email') || '' },
+                  })}
                   className="text-xs text-blue-600 hover:text-blue-700 font-semibold"
                 >
                   Quên mật khẩu?

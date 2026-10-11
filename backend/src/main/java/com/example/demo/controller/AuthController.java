@@ -1,10 +1,12 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ApiResponse;
+import com.example.demo.dto.ForgotPasswordRequest;
 import com.example.demo.dto.LoginRequest;
 import com.example.demo.dto.GoogleLoginRequest;
 import com.example.demo.dto.RefreshTokenRequest;
 import com.example.demo.dto.RegisterRequest;
+import com.example.demo.dto.ResetPasswordRequest;
 import com.example.demo.dto.TokenResponse;
 import com.example.demo.service.AuthService;
 import jakarta.validation.Valid;
@@ -62,10 +64,24 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("ÄÄƒng nháº­p báº±ng Google thÃ nh cÃ´ng!", response));
     }
 
-    /**
-     * 3. API Cấp mới Access Token (Refresh Token):
-     * Cho phép Client tự động gia hạn phiên đăng nhập mà không làm phiền người dùng.
-     */
+    /** Tạo OTP đặt lại mật khẩu cho tài khoản LOCAL. */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã gửi mã OTP đặt lại mật khẩu đến email của bạn.", null));
+    }
+
+    /** Xác minh OTP một lần và cập nhật mật khẩu mới. */
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request.getEmail(), request.getOtp(), request.getNewPassword());
+        return ResponseEntity.ok(ApiResponse.success("Đặt lại mật khẩu thành công.", null));
+    }
+
+    /** Cấp mới access token từ refresh token hợp lệ. */
     @PostMapping("/refresh-token")
     public ResponseEntity<ApiResponse<TokenResponse>> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         log.info("[AuthController] Nhận yêu cầu refresh token");
