@@ -35,7 +35,6 @@ export default function ProductCard({ product }) {
   const rawStock = Number(product.stockQuantity ?? 0);
   const stock = Number.isFinite(rawStock) ? rawStock : 0;
   const isOutOfStock = stock <= 0;
-  const showLowStock = stock > 0 && stock <= 10;
   const addToCart = useCartStore((state) => state.addToCart);
   const mediaFrameStyle = {
     position: 'relative',
@@ -187,12 +186,6 @@ export default function ProductCard({ product }) {
             {repairVietnameseLabel(product.name)}
           </h3>
         </Link>
-
-        {showLowStock && (
-          <p className="mt-2 text-xs font-medium text-red-500">
-            Chỉ còn {stock} sản phẩm
-          </p>
-        )}
 
         <div className="mt-auto pt-4">
           <p className="text-lg font-bold leading-7 text-blue-600">
