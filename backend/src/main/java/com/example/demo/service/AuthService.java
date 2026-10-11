@@ -7,10 +7,8 @@ import com.example.demo.dto.TokenResponse;
 
 public interface AuthService {
 
-    /**
-     * Đăng ký tài khoản khách hàng mới, mã hóa mật khẩu và tạo phiên đăng nhập.
-     */
-    TokenResponse register(RegisterRequest request);
+    /** Đăng ký tài khoản khách hàng mới; người dùng sẽ đăng nhập riêng sau đó. */
+    void register(RegisterRequest request);
 
     /**
      * Xác thực thông tin đăng nhập, sinh Access Token & lưu Refresh Token vào Database.

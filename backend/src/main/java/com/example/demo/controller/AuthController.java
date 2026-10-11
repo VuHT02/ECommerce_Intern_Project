@@ -33,16 +33,13 @@ public class AuthController {
 
     private final AuthService authService;
 
-    /**
-     * 1. API Đăng ký tài khoản mới:
-     * Tự động mã hóa mật khẩu bằng BCrypt và đăng nhập cấp token ngay lập tức.
-     */
+    /** Tạo tài khoản mới; đăng ký không tự tạo phiên đăng nhập. */
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse<TokenResponse>> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<ApiResponse<Void>> register(@Valid @RequestBody RegisterRequest request) {
         log.info("[AuthController] Nhận yêu cầu đăng ký cho email: {}", request.getEmail());
-        TokenResponse response = authService.register(request);
+        authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Đăng ký tài khoản thành công!", response));
+                .body(ApiResponse.success("Đăng ký thành công. Vui lòng đăng nhập.", null));
     }
 
     /**

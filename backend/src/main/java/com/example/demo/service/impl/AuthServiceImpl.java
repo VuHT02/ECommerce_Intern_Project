@@ -57,7 +57,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public TokenResponse register(RegisterRequest request) {
+    public void register(RegisterRequest request) {
         String normalizedEmail = request.getEmail().trim().toLowerCase();
 
         // 1. Kiểm tra email đã tồn tại hay chưa
@@ -77,9 +77,6 @@ public class AuthServiceImpl implements AuthService {
 
         User savedUser = userRepository.save(user);
         log.info("[Auth] Đăng ký thành công tài khoản mới cho: {} (ID: {})", savedUser.getEmail(), savedUser.getId());
-
-        // 3. Tự động sinh Access Token & Refresh Token để đăng nhập ngay sau khi đăng ký
-        return generateAuthTokens(savedUser);
     }
 
     @Override

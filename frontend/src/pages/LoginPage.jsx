@@ -33,7 +33,9 @@ export default function LoginPage() {
     handleSubmit,
     watch,
     formState: { errors },
-  } = useForm();
+  } = useForm({
+    defaultValues: { email: location.state?.email || '' },
+  });
 
   const onSubmit = async (formData) => {
     setLoading(true);
@@ -137,6 +139,12 @@ export default function LoginPage() {
             {location.state?.from && (
               <div className="mt-3 text-xs bg-amber-50 text-amber-700 px-3.5 py-2 rounded-xl border border-amber-200">
                 Vui lòng đăng nhập để tiếp tục truy cập trang này.
+              </div>
+            )}
+            {location.state?.registrationSuccess && (
+              <div role="status" className="mt-3 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs leading-5 text-emerald-800">
+                <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+                <span>Tạo tài khoản thành công. Vui lòng đăng nhập bằng email và mật khẩu vừa đăng ký.</span>
               </div>
             )}
           </div>

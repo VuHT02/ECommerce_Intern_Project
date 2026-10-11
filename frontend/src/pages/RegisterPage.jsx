@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
 import { authApi } from '../services/authApi';
 
 export default function RegisterPage() {
@@ -25,7 +24,6 @@ export default function RegisterPage() {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const navigate = useNavigate();
-  const setAuth = useAuthStore((state) => state.setAuth);
 
   const {
     register,
@@ -40,9 +38,11 @@ export default function RegisterPage() {
     setLoading(true);
     setErrorMessage('');
     try {
-      const response = await authApi.register(formData);
-      setAuth(response.data);
-      navigate('/', { replace: true });
+      await authApi.register(formData);
+      navigate('/login', {
+        replace: true,
+        state: { registrationSuccess: true, email: formData.email },
+      });
     } catch (err) {
       setErrorMessage(err.message || 'Đăng ký tài khoản không thành công!');
     } finally {
