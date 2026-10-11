@@ -40,6 +40,22 @@ public class Cart {
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CartItem> items = new ArrayList<>();
 
+    /** Keep both sides of the Cart ↔ CartItem association in sync. */
+    public void addItem(CartItem item) {
+        if (item == null) {
+            return;
+        }
+        item.setCart(this);
+        items.add(item);
+    }
+
+    /** Remove the item from both sides; orphanRemoval deletes it at flush. */
+    public void removeItem(CartItem item) {
+        if (item != null && items.remove(item)) {
+            item.setCart(null);
+        }
+    }
+
     @CreationTimestamp
     @Column(name = "CreatedAt", nullable = false, updatable = false)
     private LocalDateTime createdAt;

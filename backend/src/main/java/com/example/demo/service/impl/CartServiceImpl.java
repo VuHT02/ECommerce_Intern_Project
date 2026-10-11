@@ -73,9 +73,9 @@ public class CartServiceImpl implements CartService {
             cartItemRepository.save(item);
         } else {
             CartItem newItem = new CartItem();
-            newItem.setCart(cart);
             newItem.setProduct(product);
             newItem.setQuantity(request.getQuantity());
+            cart.addItem(newItem);
             cartItemRepository.save(newItem);
         }
 
@@ -117,7 +117,7 @@ public class CartServiceImpl implements CartService {
             throw new BadRequestException("Bạn không có quyền chỉnh sửa giỏ hàng này!");
         }
 
-        cartItemRepository.delete(item);
+        item.getCart().removeItem(item);
         return getCartByUserId(userId);
     }
 
