@@ -5,7 +5,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /** Cấu hình executor có giới hạn cho các tác vụ gửi email nền. */
@@ -14,13 +13,16 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class AsyncConfig {
 
     @Bean(name = "mailTaskExecutor")
-    public Executor mailTaskExecutor() {
+    public ThreadPoolTaskExecutor mailTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(5);
-        executor.setQueueCapacity(100);
-        executor.setThreadNamePrefix("mail-");
+        executor.setQueueCapacity(500);
+        executor.setThreadNamePrefix("AsyncMailThread-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        // Spring tự gọi afterPropertiesSet() để initialize() và destroy() để shutdown().
         return executor;
     }
 }

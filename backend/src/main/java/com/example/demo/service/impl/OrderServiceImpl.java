@@ -4,6 +4,7 @@ import com.example.demo.dto.ApplyVoucherResponse;
 import com.example.demo.dto.CreateOrderRequest;
 import com.example.demo.dto.OrderItemResponse;
 import com.example.demo.dto.OrderResponse;
+import com.example.demo.event.OrderConfirmationEmailRequestedEvent;
 import com.example.demo.entity.Cart;
 import com.example.demo.entity.CartItem;
 import com.example.demo.entity.Order;
@@ -14,7 +15,6 @@ import com.example.demo.entity.Voucher;
 import com.example.demo.exception.BadRequestException;
 import com.example.demo.exception.InsufficientStockException;
 import com.example.demo.exception.OutOfStockException;
-import com.example.demo.exception.ProductNotFoundException;
 import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.CartItemRepository;
 import com.example.demo.repository.CartRepository;
@@ -24,7 +24,11 @@ import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.VoucherRepository;
 import com.example.demo.service.OrderService;
 import com.example.demo.service.VoucherService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -35,11 +39,15 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
@@ -49,6 +57,8 @@ public class OrderServiceImpl implements OrderService {
     private final UserRepository userRepository;
     private final VoucherRepository voucherRepository;
     private final VoucherService voucherService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -64,16 +74,30 @@ public class OrderServiceImpl implements OrderService {
         }
 
         // 1. Tính tổng tiền hàng (subtotal) & Kiểm tra tồn kho trước khi đặt
+        List<CartItem> cartItems = new ArrayList<>(cart.getItems());
+        cartItems.sort(Comparator.comparing(item -> item.getProduct().getId()));
+        Map<Long, Product> lockedProducts = new HashMap<>();
         BigDecimal subtotal = BigDecimal.ZERO;
-        for (CartItem cartItem : cart.getItems()) {
-            Product product = cartItem.getProduct();
+        for (CartItem cartItem : cartItems) {
+            Long productId = cartItem.getProduct().getId();
+            log.debug("Lấy khóa tồn kho để tạo đơn: productId={}, requestedQuantity={}",
+                    productId, cartItem.getQuantity());
+            Product product = productRepository.findByIdWithLock(productId)
+                    .orElseThrow(OutOfStockException::new);
+            // Cart đã fetch Product trước khi khóa; refresh để không dùng stock cũ
+            // nếu transaction này phải chờ transaction đặt hàng khác.
+            entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE);
+            cartItem.setProduct(product);
+            lockedProducts.put(productId, product);
+            log.debug("Đã khóa tồn kho: productId={}, currentStock={}",
+                    productId, product.getStockQuantity());
 
             if (!product.isActive()) {
                 throw new BadRequestException("Sản phẩm '" + product.getName() + "' hiện đã ngừng kinh doanh!");
             }
 
             if (product.getStockQuantity() < cartItem.getQuantity()) {
-                throw new OutOfStockException(product.getName(), product.getStockQuantity(), cartItem.getQuantity());
+                throw new OutOfStockException();
             }
 
             BigDecimal itemTotal = product.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity()));
@@ -101,9 +125,9 @@ public class OrderServiceImpl implements OrderService {
             totalAmount = BigDecimal.ZERO;
         }
 
-        // 5. Trừ số lượng tồn kho của máy tính/điện thoại (Tận dụng Optimistic Lock trên Product)
-        for (CartItem cartItem : cart.getItems()) {
-            Product product = cartItem.getProduct();
+        // 5. Trừ số lượng tồn kho trên các Product đang được khóa đến lúc transaction commit.
+        for (CartItem cartItem : cartItems) {
+            Product product = lockedProducts.get(cartItem.getProduct().getId());
             int remainingStock = product.getStockQuantity() - cartItem.getQuantity();
             product.setStockQuantity(remainingStock);
             productRepository.save(product);
@@ -128,7 +152,7 @@ public class OrderServiceImpl implements OrderService {
 
         // 7. Tạo danh sách chi tiết đơn hàng (OrderDetails)
         List<OrderItem> orderItems = new ArrayList<>();
-        for (CartItem cartItem : cart.getItems()) {
+        for (CartItem cartItem : cartItems) {
             Product p = cartItem.getProduct();
             OrderItem orderItem = new OrderItem();
             orderItem.setOrder(order);
@@ -154,6 +178,11 @@ public class OrderServiceImpl implements OrderService {
         // the quantities captured by this order. COD orders consume the cart now.
         if (!"VNPAY".equalsIgnoreCase(order.getPaymentMethod())) {
             cartItemRepository.deleteByCartId(cart.getId());
+        }
+
+        // Chỉ gửi xác nhận COD; event listener sẽ đưa email vào executor sau khi transaction commit.
+        if ("COD".equalsIgnoreCase(order.getPaymentMethod())) {
+            eventPublisher.publishEvent(OrderConfirmationEmailRequestedEvent.from(savedOrder));
         }
 
         return mapToOrderResponse(savedOrder);

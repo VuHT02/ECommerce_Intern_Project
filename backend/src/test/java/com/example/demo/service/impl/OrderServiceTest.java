@@ -2,6 +2,7 @@ package com.example.demo.service.impl;
 
 import com.example.demo.dto.CreateOrderRequest;
 import com.example.demo.dto.OrderResponse;
+import com.example.demo.config.VnPayConfig;
 import com.example.demo.entity.Cart;
 import com.example.demo.entity.CartItem;
 import com.example.demo.entity.Order;
@@ -15,7 +16,11 @@ import com.example.demo.repository.OrderRepository;
 import com.example.demo.repository.ProductRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.VoucherRepository;
+import com.example.demo.service.OrderService;
 import com.example.demo.service.VoucherService;
+import com.example.demo.service.PaymentService;
+import jakarta.persistence.EntityManager;
+import jakarta.servlet.http.HttpServletRequest;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -25,24 +30,22 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
-import java.util.Arrays;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -68,6 +71,14 @@ class OrderServiceTest {
     private VoucherRepository voucherRepository;
     @Mock
     private VoucherService voucherService;
+    @Mock
+    private VnPayConfig vnPayConfig;
+    @Mock
+    private HttpServletRequest httpServletRequest;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private EntityManager entityManager;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -136,16 +147,28 @@ class OrderServiceTest {
     void givenRequestedQuantityExceedsStock_whenCreateOrder_thenOrderIsRejected() {
         arrangeCart(4, 3, DATABASE_PRICE);
 
-        assertThrows(OutOfStockException.class,
+        OutOfStockException exception = assertThrows(OutOfStockException.class,
                 () -> orderService.createOrderFromCart(validRequest(USER_ID)));
 
-        verifyNoInteractions(orderRepository, productRepository, cartItemRepository);
+        assertEquals("Sản phẩm đã hết hàng hoặc không đủ số lượng", exception.getMessage());
+        verifyNoInteractions(orderRepository, cartItemRepository);
     }
 
     @Test
-    void givenCartCleanupFails_whenCheckout_thenDatabaseStockRollsBack() throws NoSuchMethodException {
-        OrderFixture fixture = arrangeCart(2, 5, DATABASE_PRICE);
-        stubOrderSave();
+    void givenProductDoesNotExist_whenCreateOrder_thenGenericStockErrorIsReturned() {
+        arrangeCart(1, 1, DATABASE_PRICE);
+        when(productRepository.findByIdWithLock(PRODUCT_ID)).thenReturn(Optional.empty());
+
+        OutOfStockException exception = assertThrows(OutOfStockException.class,
+                () -> orderService.createOrderFromCart(validRequest(USER_ID)));
+
+        assertEquals("Sản phẩm đã hết hàng hoặc không đủ số lượng", exception.getMessage());
+        verifyNoInteractions(orderRepository, cartItemRepository);
+    }
+
+    @Test
+    void givenPaymentSetupFailsAfterOrderAndStockWrites_whenCheckout_thenTransactionRollsBack() {
+        OrderFixture fixture = arrangeCart(1, 5, DATABASE_PRICE);
 
         DataSource dataSource = new DriverManagerDataSource(
                 "jdbc:h2:mem:order_rollback_" + UUID.randomUUID().toString().replace("-", "")
@@ -153,43 +176,75 @@ class OrderServiceTest {
                 "sa",
                 "");
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
-        try {
-            jdbcTemplate.execute("CREATE TABLE product_stock (product_id BIGINT PRIMARY KEY, stock_quantity INT NOT NULL)");
-            jdbcTemplate.update("INSERT INTO product_stock (product_id, stock_quantity) VALUES (?, ?)",
-                    PRODUCT_ID, 5);
+        jdbcTemplate.execute("CREATE TABLE product_stock (product_id BIGINT PRIMARY KEY, stock_quantity INT NOT NULL)");
+        jdbcTemplate.execute("CREATE TABLE orders (order_id BIGINT PRIMARY KEY, order_number VARCHAR(30) NOT NULL)");
+        jdbcTemplate.update("INSERT INTO product_stock (product_id, stock_quantity) VALUES (?, ?)",
+                PRODUCT_ID, 5);
 
-            when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
-                Product product = invocation.getArgument(0);
-                jdbcTemplate.update("UPDATE product_stock SET stock_quantity = ? WHERE product_id = ?",
-                        product.getStockQuantity(), product.getId());
-                return product;
-            });
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
+            Product product = invocation.getArgument(0);
+            jdbcTemplate.update("UPDATE product_stock SET stock_quantity = ? WHERE product_id = ?",
+                    product.getStockQuantity(), product.getId());
+            return product;
+        });
 
-            doThrow(new IllegalStateException("Simulated cart cleanup failure"))
-                    .when(cartItemRepository).deleteByCartId(fixture.cart().getId());
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+            Order order = invocation.getArgument(0);
+            order.setId(501L);
+            jdbcTemplate.update("INSERT INTO orders (order_id, order_number) VALUES (?, ?)",
+                    order.getId(), order.getOrderNumber());
+            return order;
+        });
 
-            CreateOrderRequest request = validRequest(USER_ID);
+        CreateOrderRequest request = validRequest(USER_ID);
+        request.setPaymentMethod("VNPAY");
 
-            TransactionTemplate transactionTemplate = new TransactionTemplate(
-                    new DataSourceTransactionManager(dataSource));
-            assertThrows(IllegalStateException.class,
-                    () -> transactionTemplate.execute(status -> orderService.createOrderFromCart(request)));
+        // Dùng TransactionInterceptor để gọi đúng các phương thức @Transactional
+        // trên service thật; mock repository vẫn ghi vào cùng CSDL H2.
+        TransactionInterceptor transactionInterceptor = new TransactionInterceptor(
+                new DataSourceTransactionManager(dataSource),
+                new AnnotationTransactionAttributeSource());
 
-            Integer persistedStock = jdbcTemplate.queryForObject(
-                    "SELECT stock_quantity FROM product_stock WHERE product_id = ?", Integer.class, PRODUCT_ID);
-            assertEquals(5, persistedStock);
-            assertEquals(3, fixture.product().getStockQuantity(),
-                    "The in-memory entity changed, while the failed DB transaction must restore persisted stock.");
+        ProxyFactory orderProxyFactory = new ProxyFactory(orderService);
+        orderProxyFactory.setProxyTargetClass(true);
+        orderProxyFactory.addAdvice(transactionInterceptor);
+        OrderService transactionalOrderService = (OrderService) orderProxyFactory.getProxy();
 
-            Transactional transactional = OrderServiceImpl.class
-                    .getMethod("createOrderFromCart", CreateOrderRequest.class)
-                    .getAnnotation(Transactional.class);
-            assertNotNull(transactional);
-            assertTrue(Arrays.asList(transactional.rollbackFor()).contains(Exception.class));
-            verify(orderRepository).save(any(Order.class));
-        } finally {
-            jdbcTemplate.execute("SHUTDOWN");
-        }
+        // Giả lập lỗi khi chuẩn bị thanh toán sau khi đơn đã được lưu và tồn kho đã bị trừ.
+        PaymentServiceImpl paymentTarget = new PaymentServiceImpl(
+                vnPayConfig,
+                orderRepository,
+                cartRepository,
+                cartItemRepository,
+                productRepository,
+                voucherService,
+                transactionalOrderService,
+                eventPublisher) {
+            @Override
+            public com.example.demo.dto.PaymentResponse createPaymentUrl(
+                    Long orderId, HttpServletRequest request) {
+                throw new IllegalStateException("Simulated payment setup failure");
+            }
+        };
+        ProxyFactory paymentProxyFactory = new ProxyFactory(paymentTarget);
+        paymentProxyFactory.setProxyTargetClass(true);
+        paymentProxyFactory.addAdvice(transactionInterceptor);
+        PaymentService transactionalPaymentService = (PaymentService) paymentProxyFactory.getProxy();
+
+        assertThrows(IllegalStateException.class,
+                () -> transactionalPaymentService.createVnPayCheckout(request, httpServletRequest));
+
+        Integer persistedStock = jdbcTemplate.queryForObject(
+                "SELECT stock_quantity FROM product_stock WHERE product_id = ?", Integer.class, PRODUCT_ID);
+        Integer persistedOrderCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM orders", Integer.class);
+
+        // Assert: transaction được rollback, DB giữ nguyên tồn kho và không có đơn hàng.
+        assertEquals(5, persistedStock);
+        assertEquals(0, persistedOrderCount);
+        assertEquals(4, fixture.product().getStockQuantity(),
+                "Entity trong bộ nhớ đã đổi, nhưng dữ liệu tồn kho trong DB phải được hoàn tác.");
+        verify(orderRepository).save(any(Order.class));
     }
 
     @Test
@@ -243,6 +298,7 @@ class OrderServiceTest {
 
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
         when(cartRepository.findByUserIdWithItems(USER_ID)).thenReturn(Optional.of(cart));
+        when(productRepository.findByIdWithLock(PRODUCT_ID)).thenReturn(Optional.of(product));
         return new OrderFixture(cart, product);
     }
 

@@ -5,6 +5,7 @@ import com.example.demo.dto.OrderItemResponse;
 import com.example.demo.dto.OrderResponse;
 import com.example.demo.dto.PaymentResponse;
 import com.example.demo.dto.CreateOrderRequest;
+import com.example.demo.event.OrderConfirmationEmailRequestedEvent;
 import com.example.demo.entity.Cart;
 import com.example.demo.entity.CartItem;
 import com.example.demo.entity.Order;
@@ -24,6 +25,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,6 +62,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final ProductRepository productRepository;
     private final VoucherService voucherService;
     private final OrderService orderService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -191,7 +194,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         // 2. Kiểm tra sự tồn tại của đơn hàng
         String orderNumber = params.get("vnp_TxnRef");
-        Optional<Order> orderOpt = orderRepository.findByOrderNumber(orderNumber);
+        Optional<Order> orderOpt = orderRepository.findByOrderNumberForUpdate(orderNumber);
         if (orderOpt.isEmpty()) {
             log.warn("[VNPAY IPN] Không tìm thấy đơn hàng với mã: {}", orderNumber);
             response.put("RspCode", "01");
@@ -232,6 +235,7 @@ public class PaymentServiceImpl implements PaymentService {
             order.setStatus("PAID");
             orderRepository.save(order);
             removePurchasedQuantitiesFromCart(order);
+            eventPublisher.publishEvent(OrderConfirmationEmailRequestedEvent.from(order));
             log.info("[VNPAY IPN] Đã lưu orderCode={} với orderStatus=PAID, paymentStatus=PAID", orderNumber);
         } else {
             // Thanh toán thất bại -> Cập nhật FAILED, đồng thời hoàn trả lại số lượng sản phẩm vào kho (Product.stockQuantity)
@@ -269,7 +273,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
         log.info("[VNPAY Return] Chữ ký hợp lệ cho orderCode={}", orderNumber);
 
-        Order order = orderRepository.findByOrderNumber(orderNumber)
+        Order order = orderRepository.findByOrderNumberForUpdate(orderNumber)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng: " + orderNumber));
         log.info("[VNPAY Return] Đã tìm thấy đơn orderCode={}, currentStatus={}, currentPaymentStatus={}",
                 orderNumber, order.getStatus(), order.getPaymentStatus());
@@ -297,6 +301,7 @@ public class PaymentServiceImpl implements PaymentService {
                 order.setStatus("PAID");
                 orderRepository.save(order);
                 removePurchasedQuantitiesFromCart(order);
+                eventPublisher.publishEvent(OrderConfirmationEmailRequestedEvent.from(order));
                 log.info("[VNPAY Return] Đã lưu DB orderCode={} với orderStatus=PAID, paymentStatus=PAID",
                         orderNumber);
             } else {
