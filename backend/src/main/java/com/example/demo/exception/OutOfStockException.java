@@ -10,6 +10,10 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.CONFLICT)
 public class OutOfStockException extends InsufficientStockException {
 
+    public OutOfStockException() {
+        super("Sản phẩm đã hết hàng hoặc không đủ số lượng");
+    }
+
     public OutOfStockException(String productName) {
         super("Sản phẩm '" + productName + "' hiện đã hết hàng trong kho!");
     }
