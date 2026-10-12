@@ -2,7 +2,7 @@
 
 Ứng dụng thương mại điện tử full-stack dành cho cửa hàng điện tử, gồm website mua sắm cho khách hàng và REST API phục vụ trang quản trị. Dự án được xây dựng theo mô hình tách frontend và backend.
 
-> **CV summary:** Phát triển nền tảng thương mại điện tử full-stack với React và Spring Boot; triển khai xác thực JWT, quản lý sản phẩm/giỏ hàng/đơn hàng, voucher, thanh toán VNPay Sandbox và phân quyền quản trị.
+> ** summary:** Phát triển nền tảng thương mại điện tử full-stack với React và Spring Boot; triển khai xác thực JWT, quản lý sản phẩm/giỏ hàng/đơn hàng, voucher, thanh toán VNPay Sandbox và phân quyền quản trị.
 
 ## Tính năng
 
